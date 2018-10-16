@@ -3,10 +3,12 @@ from numba.types import float64
 import numpy as np
 from scipy import LowLevelCallable
 from scipy.integrate import quad, dblquad
-from scipy.optimize import minimize_scalar
+from scipy.optimize import minimize_scalar, brentq
 from scipy.special import gamma as Gamma
+from scipy.special import beta
+from scipy.special import betainc
 
-from constants import kpc_to_cm
+from constants import kpc_to_cm, rho_critical, GeV_to_m_sun
 from constants import dampe_excess_bin_low, dampe_excess_bin_high
 from constants import dampe_excess_iflux, dn_de_gamma_AP, _constrain_ep_spec
 from nfw_clump import dphi2_de_dr as dphi2_de_dr_nfw
@@ -18,12 +20,59 @@ from tt_clump import TT_params
 
 
 def rho(r, halo_params):
+    """Computes halo density.
+
+    Parameters
+    ----------
+    r : float
+        Distance from halo center to point of interest (kpc). Must be positive.
+    halo_params
+        A set of halo parameters.
+
+    Returns
+    -------
+    rho : float
+        Halo density at specified point in GeV / cm^3.
+    """
     if halo_params.__class__.__name__ == "NFW_params":
         return halo_params.rhos * (halo_params.rs / r)**halo_params.gamma * \
                 (1. + r / halo_params.rs)**(halo_params.gamma - 3.)
     elif halo_params.__class__.__name__ == "TT_params":
         return halo_params.rho0 * (halo_params.Rb / r)**halo_params.gamma * \
                 np.exp(-r / halo_params.Rb)
+
+
+def mass(halo_params):
+    """Computes total mass of halo.
+
+    Parameters
+    ----------
+    halo_params
+        A set of halo parameters.
+
+    Returns
+    -------
+    M : float
+        Total halo mass (for TT profile) or virial mass (for NFW profile)
+        (number of solar masses)
+    """
+    if halo_params.__class__.__name__ == "NFW_params":
+        # Find virial mass numerically
+        # NOTE: the "magic number" of 10000 should be fine for this project.
+        try:
+            r_vir = brentq(lambda r: rho(r, halo_params) - rho_critical,
+                           halo_params.rs, halo_params.rs * 10000, xtol=1e-200)
+        except RuntimeError:
+            r_vir = np.nan
+
+        # Have to integrate numerically: analytic result has an imaginary part
+        factor = 4.*np.pi * GeV_to_m_sun * kpc_to_cm**3
+        return factor * quad(lambda r: r**2 * rho(r, halo_params),
+                             0, r_vir, epsabs=0, epsrel=1e-5)[0]
+    elif halo_params.__class__.__name__ == "TT_params":
+        return (4. * np.pi * halo_params.rho0 *
+                (halo_params.Rb * kpc_to_cm)**3 *
+                Gamma(3. - halo_params.gamma)) * GeV_to_m_sun
 
 
 def luminosity(halo_params, mx, sv=3e-26, fx=2.):

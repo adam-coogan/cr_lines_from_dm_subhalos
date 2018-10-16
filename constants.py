@@ -4,9 +4,11 @@ from numba import jit
 from scipy.integrate import quad
 
 speed_of_light = 3.0e10  # cm / s
-kpc_to_cm = 3.086e21  # 1 kpc = 3.086 x 10^21 cm
+kpc_to_cm = 3.086e21  # 3.086 x 10^21 cm / kpc
+GeV_to_m_sun = 8.96515e-58  # m_sun / GeV
 
 rho_earth = 0.3  # local DM density, GeV / cm^3
+rho_critical = 5.61e-6  # critical density, GeV / cm^3
 
 b0 = 1.0e-16  # GeV/s
 e0 = 1.  # GeV
