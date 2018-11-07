@@ -3,3 +3,4 @@
 .ipynb_checkpoints
 *.pyc
 mathematica_to_python/*
+.python-version
