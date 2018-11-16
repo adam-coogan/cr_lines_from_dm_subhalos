@@ -363,8 +363,6 @@ def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e,
         bracket_low = log10_ths[np.where(~np.isnan(losses))[0]][0]
         bracket_high = log10_ths[np.where(~np.isnan(losses))[0]][-1]
 
-        print(dist, r_s, rho_s, bracket_low, bracket_middle, bracket_high)
-
         # Do not optimize if rho_s is nan
         if not np.isnan(rho_s):
             log10_th = minimize_scalar(
