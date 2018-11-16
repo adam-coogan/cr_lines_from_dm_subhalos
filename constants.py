@@ -49,7 +49,7 @@ dampe_excess_iflux = (dampe_excess_bin_high - dampe_excess_bin_low) * \
         dampe_dflux[np.abs(dampe_es-1400.).argmin()]
 
 
-def plot_obs_helper(bin_ls, bin_rs, vals, errs, label=None, color="r",
+def plot_obs_helper(bin_ls, bin_rs, vals, errs, ax, label=None, color="r",
                     alpha=0.75, lw=0.75):
     """Plots observations.
 
@@ -67,14 +67,14 @@ def plot_obs_helper(bin_ls, bin_rs, vals, errs, label=None, color="r",
     for i, (bl, br, l, u) in enumerate(zip(bin_ls, bin_rs, vals-errs,
                                            vals+errs)):
         if i != len(bin_ls) - 1:
-            plt.fill_between([bl, br], [l, l], [u, u],
-                             color=color, alpha=alpha, lw=lw)
+            ax.fill_between([bl, br], [l, l], [u, u],
+                            color=color, alpha=alpha, lw=lw)
         else:
-            plt.fill_between([bl, br], [l, l], [u, u],
-                             color=color, alpha=alpha, lw=lw, label=label)
+            ax.fill_between([bl, br], [l, l], [u, u],
+                            color=color, alpha=alpha, lw=lw, label=label)
 
 
-def plot_obs(power, highlight_excess_bins=True):
+def plot_obs(power, ax, highlight_excess_bins=True):
     """Plots DAMPE observations.
 
     Parameters
@@ -88,17 +88,17 @@ def plot_obs(power, highlight_excess_bins=True):
     plot_obs_helper(dampe_bin_low, dampe_bin_high,
                     dampe_es**power * dampe_dflux,
                     dampe_es**power * dampe_dflux_err,
-                    label="DAMPE", alpha=0.3, lw=0.5, color="y")
+                    ax, label="DAMPE", alpha=0.3, lw=0.5, color="k")
 
     if highlight_excess_bins:
-        excess_idxs = range(23, 28) + [29]
-        plot_obs_helper(dampe_bin_low[excess_idxs],
-                        dampe_bin_high[excess_idxs],
-                        dampe_es[excess_idxs]**power *
-                        dampe_dflux[excess_idxs],
-                        dampe_es[excess_idxs]**power *
-                        dampe_dflux_err[excess_idxs],
-                        alpha=0.5, lw=0.5, color="g")
+        for excess_idxs, color in zip([range(23, 28), [29]], ['r', 'b']):
+            plot_obs_helper(dampe_bin_low[excess_idxs],
+                            dampe_bin_high[excess_idxs],
+                            dampe_es[excess_idxs]**power *
+                            dampe_dflux[excess_idxs],
+                            dampe_es[excess_idxs]**power *
+                            dampe_dflux_err[excess_idxs],
+                            ax, alpha=0.5, lw=0.5, color=color)
 
 
 @jit(nopython=True)
@@ -208,7 +208,7 @@ def dn_de_gamma_AP(e, mx):
             return 0.
 
 
-def _constrain_ep_spec(dm_flux, bg_flux, excluded_idxs=[]):
+def _constrain_ep_spec(dm_flux, bg_flux, excluded_idxs=[], debug_msgs=False):
     """Determines the significance of the e-+e+ flux from DM annihilation in
     other bins.
 
@@ -237,6 +237,9 @@ def _constrain_ep_spec(dm_flux, bg_flux, excluded_idxs=[]):
     idxs = list(set(range(len(dampe_bins))) - set(excluded_idxs))
     n_sigma_max = 0.
 
+    # Track bin containing largest excess
+    e_low_max, e_high_max = np.nan, np.nan
+
     for (e_low, e_high), flux, err in reversed(zip(dampe_bins[idxs],
                                                    dampe_dflux[idxs],
                                                    dampe_dflux_err[idxs])):
@@ -255,5 +258,9 @@ def _constrain_ep_spec(dm_flux, bg_flux, excluded_idxs=[]):
 
             if n_sigma_bin > n_sigma_max:
                 n_sigma_max = n_sigma_bin
+                e_low_max, e_high_max = e_low, e_high
+
+    if debug_msgs:
+        print("Bin with largest excess: ", e_low_max, e_high_max)
 
     return n_sigma_max

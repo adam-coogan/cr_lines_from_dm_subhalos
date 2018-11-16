@@ -60,10 +60,13 @@ def mass(halo_params):
         # Find virial mass numerically
         # NOTE: the "magic number" of 10000 should be fine for this project.
         try:
-            r_vir = brentq(lambda r: rho(r, halo_params) - rho_critical,
-                           halo_params.rs, halo_params.rs * 10000, xtol=1e-200)
+            r_vir = brentq(lambda r: rho(r, halo_params) - 200 * rho_critical,
+                           0.01 * halo_params.rs, 100 * halo_params.rs,
+                           xtol=1e-200)
         except RuntimeError:
             r_vir = np.nan
+
+        print(r_vir / halo_params.rs)
 
         # Have to integrate numerically: analytic result has an imaginary part
         factor = 4.*np.pi * GeV_to_m_sun * kpc_to_cm**3
@@ -320,8 +323,8 @@ def gamma_ray_extent(e, d, mx, halo_params, thresh=0.5, sv=3e-26, fx=2):
 
 
 def constrain_ep_spec(d, mx, halo_params, bg_flux, sv=3e-26, fx=2,
-                      excluded_idxs=[]):
+                      excluded_idxs=[], debug_msgs=False):
     def dm_flux(e):
         return dphi_de_e(e, d, halo_params, mx, sv, fx)
 
-    return _constrain_ep_spec(dm_flux, bg_flux, excluded_idxs)
+    return _constrain_ep_spec(dm_flux, bg_flux, excluded_idxs, debug_msgs)
