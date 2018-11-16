@@ -38,7 +38,7 @@ def rho(dist, r_s, rho_s, gamma, halo):
         def _rho(dist, r_s, rho_s, gamma):
             return rho_s * (r_s / dist)**gamma * \
                     (1. + dist / r_s)**(gamma - 3.)
-    elif halo == "tt":
+    elif halo == "exp":
         def _rho(dist, r_s, rho_s, gamma):
             return rho_s * (r_s / dist)**gamma * np.exp(-dist / r_s)
 
@@ -81,7 +81,7 @@ def mass(r_s, rho_s, gamma, halo):
 
             return factor * quad(_mass_integrand, 0, r_vir, epsabs=0,
                                  epsrel=1e-5)[0]
-    elif halo == "tt":
+    elif halo == "exp":
         def _mass(r_s, rho_s, gamma):
             return (4. * np.pi * rho_s * (r_s * kpc_to_cm)**3 *
                     Gamma(3. - gamma)) * GeV_to_m_sun
@@ -103,7 +103,7 @@ def luminosity(r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high, sv=3e-26,
             L_clump = ((4*np.pi*rho_s**2*rs_cm**3) /
                        (30 - 47*gamma + 24*gamma**2 - 4*gamma**3))
             return factor * L_clump
-    elif halo == "tt":
+    elif halo == "exp":
         def _luminosity(r_s, rho_s, gamma):
             Rb_cm = kpc_to_cm * r_s
             L_clump = (2**(-1 + 2*gamma) * np.pi * Rb_cm**3 * rho_s**2 *
@@ -144,7 +144,7 @@ def dphi_de_e(e, dist, r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high,
     """
     if halo == "nfw":
         dphi2_de_dr = dphi2_de_dr_nfw
-    elif halo == "tt":
+    elif halo == "exp":
         dphi2_de_dr = dphi2_de_dr_tt
 
     def _dphi_de_e(e, dist, r_s, rho_s, gamma):
@@ -180,7 +180,7 @@ def J_factor(dist, r_s, rho_s, gamma, halo, th_max):
     """
     if halo == "nfw":
         dJ_dr = dJ_dr_nfw
-    elif halo == "tt":
+    elif halo == "exp":
         dJ_dr = dJ_dr_tt
 
     def _J_factor(dist, r_s, rho_s, gamma):
@@ -262,7 +262,7 @@ def rho_s_dampe(dist, r_s, gamma, halo, bg_flux=bg_dampe, sv=3e-26, fx=2):
 
     if halo == "nfw":
         dphi2_de_dr = dphi2_de_dr_nfw
-    elif halo == "tt":
+    elif halo == "exp":
         dphi2_de_dr = dphi2_de_dr_tt
 
     def _rho_s_dampe(dist, r_s, gamma):
