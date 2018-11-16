@@ -359,6 +359,11 @@ def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e,
         log10_ths = np.linspace(bracket_low, bracket_high, 20)
         losses = np.vectorize(loss)(log10_ths)
         bracket_middle = log10_ths[np.nanargmin(losses)]
+        # Make sure loss at bracket endpoints is defined
+        bracket_low = log10_ths[np.where(~np.isnan(losses))[0]][0]
+        bracket_high = log10_ths[np.where(~np.isnan(losses))[0]][-1]
+
+        print(dist, r_s, rho_s, bracket_low, bracket_middle, bracket_high)
 
         # Do not optimize if rho_s is nan
         if not np.isnan(rho_s):
