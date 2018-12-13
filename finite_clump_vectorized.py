@@ -13,6 +13,7 @@ from constants import kpc_to_cm, rho_critical, GeV_to_m_sun, fermi_psf
 from constants import dampe_excess_bin_low, dampe_excess_bin_high
 from constants import dampe_excess_iflux, dn_de_gamma_AP, _constrain_ep_spec
 from constants import dampe_bins, dampe_dflux, dampe_dflux_err
+from constants import fermi_pt_src_sens
 from nfw_clump import dphi2_de_dr as dphi2_de_dr_nfw
 from nfw_clump import dJ_dr as dJ_dr_nfw
 from tt_clump import dphi2_de_dr as dphi2_de_dr_tt
@@ -269,11 +270,8 @@ def rho_s_dampe(dist, r_s, gamma, halo, bg_flux=bg_dampe, sv=3e-26, fx=2):
         # Set rho_s to 1 and use the fact that the flux is proportional to
         # rho_s**2
         args = (dist, r_s, 1., gamma, mx, sv, fx)
-        dm_iflux = 2.*dblquad(dphi2_de_dr,
-                              dampe_excess_bin_low, dampe_excess_bin_high,
-                              lambda e: 0, lambda e: 100.*dist,
-                              args, epsabs=0, epsrel=1e-5)[0]
-        # Improve numerical stability by splitting the spatial integral
+        # Improve numerical stability by splitting the spatial integral. The
+        # factor of 2 accounts for DAMPE measuring e+ and e-.
         dm_iflux_near = 2.*dblquad(
             dphi2_de_dr,
             dampe_excess_bin_low, dampe_excess_bin_high,
@@ -288,31 +286,6 @@ def rho_s_dampe(dist, r_s, gamma, halo, bg_flux=bg_dampe, sv=3e-26, fx=2):
         return np.sqrt(residual_iflux / (dm_iflux_near + dm_iflux_far))
 
     return np.vectorize(_rho_s_dampe)(dist, r_s, gamma)
-
-
-#def luminosity_dampe(d, halo_params, bg_flux, sv=3e-26, fx=2):
-#    mx = dampe_excess_bin_high
-#    halo_params = rho_s_dampe(d, halo_params, bg_flux, sv, fx)
-#
-#    return luminosity(halo_params, mx, sv, fx)
-
-
-#def dphi_de_e_dampe(e, d, halo_params, bg_flux, sv=3e-26, fx=2):
-#    """Gets differential electron flux by fitting rho_s to the DAMPE excess.
-#    """
-#    mx = dampe_excess_bin_high
-#    halo_params = rho_s_dampe(d, halo_params, bg_flux, sv, fx)
-#
-#    return dphi_de_e(e, d, halo_params, mx, sv, fx)
-
-
-#def dphi_de_gamma_dampe(e, th_max, d, halo_params, bg_flux, sv=3e-26, fx=2):
-#    """Gets differential photon flux by fitting rho_s to the DAMPE excess.
-#    """
-#    mx = dampe_excess_bin_high
-#    halo_params = rho_s_dampe(d, halo_params, bg_flux, sv, fx)
-#
-#    return dphi_de_g(e, th_max, d, halo_params, mx, sv, fx)
 
 
 def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e,
@@ -434,3 +407,29 @@ def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3.,
         return n_sigma_max
 
     return np.vectorize(_line_width_constraint)(dist, r_s, rho_s, gamma)
+
+
+def fermi_point_src_contraint(dist, r_s, gamma, halo,
+                              mx=dampe_excess_bin_high, sv=3e-26, fx=2,
+                              e_star=230.):
+    """Computes the maximum halo density normalization consistent with Fermi's
+    non-observation of point sources coming from DM clumps.
+
+    Parameters
+    ----------
+    e_star : float
+        This is the energy at which the photon spectrum from the clump will
+        first touch Fermi's broadband point-source sensitivity curve. Since the
+        mass and spectrum are fixed through our analysis, the default value
+        applies for all clump parameters.
+
+    Returns
+    -------
+    rho_s : float
+        The maximum density normalization allowed by Fermi point source bounds.
+    """
+    dphi_de_g_dm = dphi_de_g(e_star, dist, r_s, 1, gamma, halo, fermi_psf, mx,
+                             sv, fx)
+    dphi_de_g_fermi = fermi_pt_src_sens(e_star)
+
+    return np.sqrt(dphi_de_g_fermi / dphi_de_g_dm)

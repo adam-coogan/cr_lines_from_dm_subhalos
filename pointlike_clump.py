@@ -76,7 +76,7 @@ def dphi_de_e_pt(e, d, mx, lum=None):
         lam = lambda_prop(e, mx)
 
         return 1. / b(e) * np.exp(-d_cm**2 / (4.*lam)) / \
-            (4.*np.pi*lam)**1.5 * speed_of_light * lum
+            (4.*np.pi*lam)**1.5 * lum * speed_of_light/(4*np.pi)
     else:
         return 0
 

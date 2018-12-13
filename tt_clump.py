@@ -49,6 +49,15 @@ def K(r, th, d, Rb, rho0, gamma):
                                        2*d*r*np.cos(th))) / Rb)) / (d*r)
 
 
+@jit(nopython=True)
+def K_def(r, d, Rb, rho0, gamma):
+    """K(th=0) - K(th=pi)
+    """
+    return (4**(gamma - 1)*Rb**2*rho0**2 *
+            (-gamma_inc_upper(2*(1 - gamma), 2 * (d + r) / Rb) +
+             gamma_inc_upper(2*(1 - gamma), 2 * np.abs(d - r) / Rb))) / (d*r)
+
+
 @cfunc(float64(intc, CPointer(float64)))
 def dphi2_de_dr_cf(n, xx):
     r = xx[0]
@@ -65,7 +74,7 @@ def dphi2_de_dr_cf(n, xx):
         return 0.
     else:
         # Constant factor
-        fact_const = np.pi*sv / (fx*mx**2)
+        fact_const = np.pi*sv / (fx*mx**2) * speed_of_light/(4*np.pi)
 
         # Energy-dependent parts
         b = b0 * (e / e0)**2
@@ -74,14 +83,12 @@ def dphi2_de_dr_cf(n, xx):
         fact_e = 1. / (b * (4.*np.pi*lam)**1.5)
 
         # Term from performing theta integral
-        K_diff = K(r, 0, d, Rb, rho0, gamma) - \
-            K(r, np.pi, d, Rb, rho0, gamma)
+        K_diff = K_def(r, d, Rb, rho0, gamma)
         # Term with purely radial dependence
         r_term = r**2 * np.exp(-(r * kpc_to_cm)**2 / (4. * lam))
 
         # Put it all together
-        return fact_const * fact_e * K_diff * r_term * \
-            speed_of_light * kpc_to_cm**3
+        return fact_const * fact_e * K_diff * (r_term * kpc_to_cm**3)
 
 
 @cfunc(float64(intc, CPointer(float64)))

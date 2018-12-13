@@ -1,4 +1,5 @@
 from numba import jit
+import numpy as np
 
 
 @jit(nopython=True)
@@ -55,3 +56,12 @@ def bg_alt(e):
     return phi0 * e**(-gamma) * \
         (1 + (ebr1 / e)**delta)**(delta_gamma1/delta) * \
         (1 + (e/ebr2)**delta)**(delta_gamma2/delta)
+
+
+I100 = 1.48e-7 * 1e3 # GeV^-1 cm^-2 s^-1 sr^-1
+gamma_fermi = 2.31
+e_cut = 362.  # GeV
+
+@jit(nopython=True)
+def dphi_de_egb_fermi(e):
+    return I100 * (e / 0.1)**(-gamma_fermi) * np.exp(-e / e_cut)

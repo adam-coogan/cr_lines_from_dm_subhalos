@@ -2,9 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numba import jit
 from scipy.integrate import quad
+from scipy.interpolate import interp1d
 
 speed_of_light = 3.0e10  # cm / s
 kpc_to_cm = 3.086e21  # 3.086 x 10^21 cm / kpc
+hbar = 6.582e-16*1/1e9  # GeV s
+Hz_to_GeV2_cm3 = 1 / (hbar**2 * speed_of_light**3)
 GeV_to_m_sun = 8.96515e-58  # m_sun / GeV
 
 rho_earth = 0.3  # local DM density, GeV / cm^3
@@ -48,6 +51,14 @@ dampe_excess_bin_low, dampe_excess_bin_high = 1318.3, 1513.6
 dampe_excess_iflux = (dampe_excess_bin_high - dampe_excess_bin_low) * \
         dampe_dflux[np.abs(dampe_es-1400.).argmin()]
 
+# Fermi broadband flux sensitivity: max flux of a power law source at the
+# detection threshold for any power law. From here.
+e_g_f, dphi_de_g_f = np.loadtxt("data/fermi/broadband_flux_sensitivity_p8r2"
+                                "_source_v6_all_10yr_zmax100_n10.0_e1.50_ts25"
+                                "_120_045.csv").T
+e_g_f = e_g_f / 1e3 # MeV -> GeV
+dphi_de_g_f = 624.15091*dphi_de_g_f / e_g_f**2  # erg -> GeV, divide by E^2
+fermi_pt_src_sens = interp1d(e_g_f, dphi_de_g_f, bounds_error=False)
 
 def plot_obs_helper(bin_ls, bin_rs, vals, errs, ax, label=None, color="r",
                     alpha=0.75, lw=0.75):
@@ -84,21 +95,25 @@ def plot_obs(power, ax, highlight_excess_bins=True):
     highlight_excess_bins : bool
         True highlights Ge et al's excess bins in green
     """
+    obs_color = "goldenrod"
+    excess_color = "steelblue"
+
     # Observations
     plot_obs_helper(dampe_bin_low, dampe_bin_high,
                     dampe_es**power * dampe_dflux,
                     dampe_es**power * dampe_dflux_err,
-                    ax, label="DAMPE", alpha=0.3, lw=0.5, color="k")
+                    ax, label="DAMPE", alpha=0.3, lw=0.5, color=obs_color)
 
     if highlight_excess_bins:
-        for excess_idxs, color in zip([range(23, 28), [29]], ['r', 'b']):
-            plot_obs_helper(dampe_bin_low[excess_idxs],
-                            dampe_bin_high[excess_idxs],
-                            dampe_es[excess_idxs]**power *
-                            dampe_dflux[excess_idxs],
-                            dampe_es[excess_idxs]**power *
-                            dampe_dflux_err[excess_idxs],
-                            ax, alpha=0.5, lw=0.5, color=color)
+        #for excess_idxs, color in zip([range(23, 28), [29]], ['r', 'b']):
+        excess_idxs = [29]
+        plot_obs_helper(dampe_bin_low[excess_idxs],
+                        dampe_bin_high[excess_idxs],
+                        dampe_es[excess_idxs]**power *
+                        dampe_dflux[excess_idxs],
+                        dampe_es[excess_idxs]**power *
+                        dampe_dflux_err[excess_idxs],
+                        ax, alpha=0.5, lw=0.5, color=excess_color)
 
 
 @jit(nopython=True)
@@ -137,7 +152,7 @@ def D(e):
 def t_diff(e, d):
     """Diffusion timescale (s)
     """
-    return (d*kpc_to_cm)**2 / (D0 * 1400.**delta)
+    return (d*kpc_to_cm)**2 / D(e)
 
 
 @jit(nopython=True)
