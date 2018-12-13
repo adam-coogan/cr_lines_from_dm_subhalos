@@ -11,30 +11,64 @@ from constants import e0, b0, D0, delta, kpc_to_cm, speed_of_light
 # Set up the gamma function. It needs to be defined this way since
 # get_cython_function_address doesn't work with gamma, likely because gamma
 # involves complex numbers.
-addr_gs = get_cython_function_address("scipy.special.cython_special",
-                                      "gammasgn")
+addr_gs = get_cython_function_address("scipy.special.cython_special", "gammasgn")
 functype_gs = ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double)
-gammasgn_fn = functype_gs(addr_gs)
+gammasgn_cs = functype_gs(addr_gs)
 
-addr_gln = get_cython_function_address("scipy.special.cython_special",
-                                       "gammaln")
+addr_gln = get_cython_function_address("scipy.special.cython_special", "gammaln")
 functype_gln = ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double)
-gammaln_fn = functype_gln(addr_gln)
+gammaln_cs = functype_gln(addr_gln)
 
+## Required to handle case where first argument to incomplete gamma function is 0.
+# Unclear how to work around get_cython_function_address failing here.
+#addr_expi = get_cython_function_address("scipy.special.cython_special", "expi")
+#functype_expi = ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double)
+#expi_cs = functype_expi(addr_expi)
 
 # Set up upper incomplete gamma function. scipy's version is normalized by
 # 1/Gamma.
-addr_ggi = get_cython_function_address("scipy.special.cython_special",
-                                       "gammaincc")
-functype_gi = ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double,
-                               ctypes.c_double)
-gammaincc_fn = functype_gi(addr_ggi)
+addr_ggi = get_cython_function_address("scipy.special.cython_special", "gammaincc")
+functype_gi = ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double, ctypes.c_double)
+gammaincc_cs = functype_gi(addr_ggi)
 
 
 @vectorize('float64(float64, float64)', nopython=True)
-def gamma_inc_upper(a, x):
-    gamma_val = np.exp(gammaln_fn(a)) * gammasgn_fn(a)
-    return gamma_val * gammaincc_fn(a, x)
+def gamma_inc_upper(a, z):
+    """Incomplete upper gamma function as defined in Mathematica and on
+    wikipedia.
+
+    Notes
+    -----
+    * Verified against Mathematica
+    * Uses recursion relation 8.8.2 from https://dlmf.nist.gov/8.8 to handle
+      negative values of a:
+          gamma_inc_upper(a+1, z) == a * gamma_inc_upper(a, z) + z**a * exp(-z)
+
+    Parameters
+    ----------
+    a : float
+        First argument. Cannot be zero or a negative integer.
+    z : float
+    """
+    assert a != 0
+    assert not (int(a) == a and a < 0)
+
+    if a > 0:
+        gamma_val = np.exp(gammaln_cs(a)) * gammasgn_cs(a)
+        return gamma_val * gammaincc_cs(a, z)
+    else:
+        a_c = int(np.ceil(np.abs(a)))
+        a_f = int(np.floor(np.abs(a)))
+
+        exp_terms = 0.
+        denom = 1.
+        for m in range(a_f, -1, -1):
+            denom *= a + m
+            exp_terms = (exp_terms + z**a) / (a + m)
+        exp_terms *= np.exp(-z)
+
+        gamma_val = np.exp(gammaln_cs(a + a_c)) * gammasgn_cs(a + a_c)
+        return gamma_val * gammaincc_cs(a + a_c, z) / denom - exp_terms
 
 
 # For holding halo parameters
