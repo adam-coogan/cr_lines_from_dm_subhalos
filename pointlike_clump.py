@@ -8,9 +8,10 @@ from constants import kpc_to_cm, lambda_prop, b, speed_of_light
 from constants import dn_de_gamma_AP
 from constants import dampe_excess_bin_low, dampe_excess_bin_high
 from constants import dampe_excess_iflux, _constrain_ep_spec
+from background_models import bg_dampe
 
 
-def lum_dampe_pt(d, bg_flux):
+def lum_dampe_pt(d, bg_flux=bg_dampe):
     """Returns the luminosity such that xx->e+e- fits the DAMPE excess.
 
     Returns
@@ -19,40 +20,29 @@ def lum_dampe_pt(d, bg_flux):
         Luminosity in s^-1
     """
     mx = dampe_excess_bin_high
-
-    @cfunc(float64(float64))
-    def dm_flux_cf(e):
-        return dphi_de_e_pt(e, d, mx, lum=1.)
-
-    dm_flux_LLC = LowLevelCallable(dm_flux_cf.ctypes)
-
-    # Factor of 2 to count e+ and e-
-    dm_iflux = 2 * quad(dm_flux_LLC,
-                        dampe_excess_bin_low,
-                        dampe_excess_bin_high,
-                        points=[mx],
-                        epsabs=0)[0]
-
     @cfunc(float64(float64))
     def bg_flux_cf(e):
         return bg_flux(e)
-
     bg_flux_LLC = LowLevelCallable(bg_flux_cf.ctypes)
-    residual_iflux = dampe_excess_iflux - quad(bg_flux_LLC,
-                                               dampe_excess_bin_low,
-                                               dampe_excess_bin_high,
-                                               epsabs=0.)[0]
+    bg_iflux = quad(bg_flux_LLC, dampe_excess_bin_low, dampe_excess_bin_high, epsabs=0.)[0]
 
-    return residual_iflux / dm_iflux
+    def helper(d):
+        @cfunc(float64(float64))
+        def dm_flux_cf(e):
+            return dphi_de_e_pt(e, d, mx, lum=1.)
+        dm_flux_LLC = LowLevelCallable(dm_flux_cf.ctypes)
+        # Factor of 2 to count e+ and e-
+        dm_iflux = 2 * quad(dm_flux_LLC, dampe_excess_bin_low,
+                            dampe_excess_bin_high, points=[mx], epsabs=0)[0]
+        residual_iflux = dampe_excess_iflux - bg_iflux
+        return residual_iflux / dm_iflux
+
+    return np.vectorize(helper)(d)
 
 
 @jit(nopython=True)
 def dphi_de_e_pt(e, d, mx, lum=None):
     """Flux of e- from a point-like DM clump after propagation.
-
-    To-do
-    -----
-    Include muon, tau final state contributions?
 
     Parameters
     ----------

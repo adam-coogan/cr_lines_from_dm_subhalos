@@ -64,4 +64,11 @@ e_cut = 362.  # GeV
 
 @jit(nopython=True)
 def dphi_de_egb_fermi(e):
+    """Fermi extragalactic gamma ray background flux.
+
+    Returns
+    -------
+    float
+        EGB in GeV^-1 cm^-2 s^-1 sr^-1.
+    """
     return I100 * (e / 0.1)**(-gamma_fermi) * np.exp(-e / e_cut)

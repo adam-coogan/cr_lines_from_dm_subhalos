@@ -1,4 +1,4 @@
-from numba import cfunc
+from numba import cfunc, jit
 from numba.types import float64
 import numpy as np
 from scipy import LowLevelCallable
@@ -9,15 +9,21 @@ from scipy.special import beta
 from scipy.special import betainc
 
 from background_models import bg_dampe
+from constants import e_low_aniso_fermi, e_high_aniso_fermi, aniso_fermi
 from constants import kpc_to_cm, rho_critical, GeV_to_m_sun, fermi_psf
+from constants import speed_of_light, D, rho_max, lambert_w_series
 from constants import dampe_excess_bin_low, dampe_excess_bin_high
-from constants import dampe_excess_iflux, dn_de_gamma_AP, _constrain_ep_spec
+from constants import dampe_excess_iflux, dn_de_gamma_AP
 from constants import dampe_bins, dampe_dflux, dampe_dflux_err
-from constants import fermi_pt_src_sens
+from constants import fermi_pt_src_sens_120_45 as fermi_pt_src_sens
+from constants import gamma_inc_upper
 from nfw_clump import dphi2_de_dr as dphi2_de_dr_nfw
 from nfw_clump import dJ_dr as dJ_dr_nfw
+from nfw_clump import dphi3_de_dr_dd as dphi3_de_dr_dd_nfw
 from tt_clump import dphi2_de_dr as dphi2_de_dr_tt
 from tt_clump import dJ_dr as dJ_dr_tt
+from tt_clump import dphi3_de_dr_dd as dphi3_de_dr_dd_exp
+from tt_clump import ann_plateau_radius as ann_plateau_radius_exp
 
 
 def rho(dist, r_s, rho_s, gamma, halo):
@@ -41,7 +47,11 @@ def rho(dist, r_s, rho_s, gamma, halo):
                     (1. + dist / r_s)**(gamma - 3.)
     elif halo == "exp":
         def _rho(dist, r_s, rho_s, gamma):
-            return rho_s * (r_s / dist)**gamma * np.exp(-dist / r_s)
+            r_p = ann_plateau_radius_exp(r_s, rho_s, gamma)
+            if dist < r_p:
+                return rho_max
+            else:
+                return rho_s * (r_s / dist)**gamma * np.exp(-dist / r_s)
 
     return np.vectorize(_rho)(dist, r_s, rho_s, gamma)
 
@@ -71,6 +81,7 @@ def mass(r_s, rho_s, gamma, halo):
 
                 r_vir = brentq(_r_vir_integrand, 0.01 * r_s, 100. * r_s,
                                xtol=1e-200)
+                print(r_vir)
             except RuntimeError:
                 r_vir = np.nan
 
@@ -93,8 +104,6 @@ def mass(r_s, rho_s, gamma, halo):
 def luminosity(r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high, sv=3e-26,
                fx=2.):
     """Computes the halo luminosity (Hz).
-
-    TODO: change units.
     """
     factor = sv / (2*fx*mx**2)
 
@@ -107,9 +116,11 @@ def luminosity(r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high, sv=3e-26,
     elif halo == "exp":
         def _luminosity(r_s, rho_s, gamma):
             Rb_cm = kpc_to_cm * r_s
-            L_clump = (2**(-1 + 2*gamma) * np.pi * Rb_cm**3 * rho_s**2 *
-                       Gamma(3 - 2*gamma))
-            return factor * L_clump
+            r_p_cm = kpc_to_cm * ann_plateau_radius_exp(r_s, rho_s, gamma)
+            return np.pi/6. * factor * (3. * 4.**gamma * rho_s**2 * Rb_cm**3 *
+                                        gamma_inc_upper(3. - 2. * gamma,
+                                                        2. * r_p_cm / Rb_cm) +
+                                        8. * rho_max**2 * r_p_cm**3)
 
     return np.vectorize(_luminosity)(r_s, rho_s, gamma)
 
@@ -156,7 +167,7 @@ def dphi_de_e(e, dist, r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high,
             # Split integral around center of clump
             int_near = quad(dphi2_de_dr, 0, dist, args, points=[dist],
                             epsabs=0, epsrel=1e-5)[0]
-            int_far = quad(dphi2_de_dr, dist, 100.*dist, args, points=[dist],
+            int_far = quad(dphi2_de_dr, dist, 10.*dist, args, points=[dist],
                            epsabs=0, epsrel=1e-5)[0]
             return int_near + int_far
 
@@ -189,7 +200,7 @@ def J_factor(dist, r_s, rho_s, gamma, halo, th_max):
         # Split integral around center of clump
         int_near = quad(dJ_dr, 0., dist, args, points=[dist], epsabs=0,
                         epsrel=1e-5)[0]
-        int_far = quad(dJ_dr, dist, 100.*dist, args, points=[dist], epsabs=0,
+        int_far = quad(dJ_dr, dist, 10.*dist, args, points=[dist], epsabs=0,
                        epsrel=1e-5)[0]
 
         return (int_near + int_far) * kpc_to_cm
@@ -280,7 +291,7 @@ def rho_s_dampe(dist, r_s, gamma, halo, bg_flux=bg_dampe, sv=3e-26, fx=2):
         dm_iflux_far = 2.*dblquad(
             dphi2_de_dr,
             dampe_excess_bin_low, dampe_excess_bin_high,
-            lambda e: dist, lambda e: 100.*dist,
+            lambda e: dist, lambda e: 10.*dist,
             args=args, epsabs=0, epsrel=1e-5)[0]
 
         return np.sqrt(residual_iflux / (dm_iflux_near + dm_iflux_far))
@@ -433,3 +444,80 @@ def fermi_point_src_contraint(dist, r_s, gamma, halo,
     dphi_de_g_fermi = fermi_pt_src_sens(e_star)
 
     return np.sqrt(dphi_de_g_fermi / dphi_de_g_dm)
+
+
+def integrated_aniso(dist, r_s, rho_s, gamma, halo, e_low=e_low_aniso_fermi[-1],
+                     e_high=e_high_aniso_fermi[-1], bg_flux=bg_dampe,
+                     mx=dampe_excess_bin_high, sv=3e-26, fx=2):
+    """Computes delta(e), the differential e+- anisotropy.
+
+    TODO: fix this!!!
+    """
+    if halo == "exp":
+        dphi3_de_dr_dd = dphi3_de_dr_dd_exp
+    elif halo == "nfw":
+        dphi3_de_dr_dd = dphi3_de_dr_dd_nfw
+
+    def _helper(dist, r_s, rho_s):
+            # Gradient of flux from clump
+            # @jit(nopython=True)
+            # def _int_num(r, e):
+            #     coeff = 3*D(e) / speed_of_light / kpc_to_cm
+            #     return coeff * dphi3_de_dr_dd(r, e, dist, r_s, rho_s, gamma, mx, sv, fx)
+            num = 2*dblquad(
+                dphi3_de_dr_dd, e_low, e_high, lambda e: 0., lambda e: 10*dist,
+                epsabs=0, epsrel=1e-5)[0]
+
+            denom = 2*quad(dphi_de_e, e_low, e_high, args=(dist, r_s, rho_s,
+                                                           gamma, halo, mx, sv,
+                                                           fx),
+                           epsabs=0, epsrel=1e-5)[0]
+
+            @jit(nopython=True)
+            def _int_bg(e):
+                return bg_flux(e)
+            denom += quad(_int_bg, e_low, e_high, epsabs=0, epsrel=1e-5)[0]
+
+            return num / denom
+
+    return np.vectorize(_helper)(dist, r_s, rho_s)
+
+
+def differential_aniso(e, dist, r_s, rho_s, gamma, halo, bg_flux=bg_dampe,
+                       mx=dampe_excess_bin_high, sv=3e-26, fx=2):
+    """Computes delta(e), the differential e+- anisotropy.
+    """
+    if halo == "exp":
+        dphi3_de_dr_dd = dphi3_de_dr_dd_exp
+    elif halo == "nfw":
+        dphi3_de_dr_dd = dphi3_de_dr_dd_nfw
+
+    def _helper(e, dist, r_s, rho_s):
+        if e > mx:
+            return 0.
+        else:
+            dphi_de_tot = (bg_flux(e) +
+                           dphi_de_e(e, dist, r_s, rho_s, gamma, halo, mx, sv, fx))
+            args = (e, dist, r_s, rho_s, gamma, mx, sv, fx)
+            # Gradient of flux from clump
+            dphi2_de_dd_near = 2*quad(dphi3_de_dr_dd, 0, dist, args,
+                                      points=[dist], epsabs=0, epsrel=1e-5)[0]
+            dphi2_de_dd_far = 2*quad(dphi3_de_dr_dd, dist, 10.*dist, args,
+                                     points=[dist], epsabs=0, epsrel=1e-5)[0]
+            dphi2_de_dd = dphi2_de_dd_near + dphi2_de_dd_far
+
+            return 3 * D(e) / speed_of_light * np.abs(dphi2_de_dd / dphi_de_tot) / kpc_to_cm
+
+    return np.vectorize(_helper)(e, dist, r_s, rho_s)
+
+
+#def anisotropy_constraint(dist, r_s, rho_s, gamma, halo, bg_flux=bg_dampe,
+#                          mx=dampe_excess_bin_high, sv=3e-26, fx=2,
+#                          debug=False):
+#    """Computes the ratio of the clump e-+e+ anisotropy to the Fermi anisotropy
+#    bound in its highest-energy bin.
+#    """
+#    return (integrated_aniso(dist, r_s, rho_s, gamma, halo,
+#                             e_low_aniso_fermi[-1], e_high_aniso_fermi[-1],
+#                             bg_flux, mx, sv, fx, debug) /
+#            aniso_fermi[-1])
