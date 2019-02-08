@@ -127,7 +127,7 @@ dampe_excess_iflux = (dampe_excess_bin_high - dampe_excess_bin_low) * \
         dampe_dflux[np.abs(dampe_es-1400.).argmin()]
 
 def max_dm_density(mx, sv):
-    """Maximum possible DM density.
+    """Maximum possible DM density, GeV / cm^3.
     """
     return mx / sv / t_universe
 

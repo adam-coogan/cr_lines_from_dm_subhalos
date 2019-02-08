@@ -81,7 +81,6 @@ def mass(r_s, rho_s, gamma, halo):
 
                 r_vir = brentq(_r_vir_integrand, 0.01 * r_s, 100. * r_s,
                                xtol=1e-200)
-                print(r_vir)
             except RuntimeError:
                 r_vir = np.nan
 
@@ -102,7 +101,7 @@ def mass(r_s, rho_s, gamma, halo):
 
 
 def luminosity(r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high, sv=3e-26,
-               fx=2.):
+               fx=1.):
     """Computes the halo luminosity (Hz).
     """
     factor = sv / (2*fx*mx**2)
@@ -115,18 +114,24 @@ def luminosity(r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high, sv=3e-26,
             return factor * L_clump
     elif halo == "exp":
         def _luminosity(r_s, rho_s, gamma):
+            # No annihilation plateau
             Rb_cm = kpc_to_cm * r_s
-            r_p_cm = kpc_to_cm * ann_plateau_radius_exp(r_s, rho_s, gamma)
-            return np.pi/6. * factor * (3. * 4.**gamma * rho_s**2 * Rb_cm**3 *
-                                        gamma_inc_upper(3. - 2. * gamma,
-                                                        2. * r_p_cm / Rb_cm) +
-                                        8. * rho_max**2 * r_p_cm**3)
+            L_clump = (2**(-1 + 2*gamma) * np.pi * Rb_cm**3 * rho_s**2 *
+                       Gamma(3 - 2*gamma))
+            return factor * L_clump
+            # With annihilation plateau
+            # Rb_cm = kpc_to_cm * r_s
+            # r_p_cm = kpc_to_cm * ann_plateau_radius_exp(r_s, rho_s, gamma)
+            # return np.pi/6. * factor * (3. * 4.**gamma * rho_s**2 * Rb_cm**3 *
+            #                             gamma_inc_upper(3. - 2. * gamma,
+            #                                             2. * r_p_cm / Rb_cm) +
+            #                             8. * rho_max**2 * r_p_cm**3)
 
     return np.vectorize(_luminosity)(r_s, rho_s, gamma)
 
 
 def lum_to_rho_norm(r_s, lum, gamma, halo, mx=dampe_excess_bin_high, sv=3e-26,
-                    fx=2):
+                    fx=1.):
     """Determines the halo's density normalization given its luminosity.
 
     Notes
@@ -138,7 +143,7 @@ def lum_to_rho_norm(r_s, lum, gamma, halo, mx=dampe_excess_bin_high, sv=3e-26,
 
 
 def dphi_de_e(e, dist, r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high,
-              sv=3e-26, fx=2):
+              sv=3e-26, fx=1.):
     """Computes dphi/dE|_{e-} for a DM clump.
 
     Parameters
@@ -165,10 +170,12 @@ def dphi_de_e(e, dist, r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high,
         else:  # perform integration over r
             args = (e, dist, r_s, rho_s, gamma, mx, sv, fx)
             # Split integral around center of clump
-            int_near = quad(dphi2_de_dr, 0, dist, args, points=[dist],
-                            epsabs=0, epsrel=1e-5)[0]
-            int_far = quad(dphi2_de_dr, dist, 10.*dist, args, points=[dist],
-                           epsabs=0, epsrel=1e-5)[0]
+            int_near, err_near = quad(dphi2_de_dr, 0, dist, args, points=[dist],
+                                      epsabs=0, epsrel=1e-5)
+            int_far, err_far = quad(dphi2_de_dr, dist, 10.*dist, args, points=[dist],
+                                    epsabs=0, epsrel=1e-5)
+            # print("dphi_de_e(): %.2e, %.2e" % (err_near / int_near,
+            #                                    err_far / int_far))
             return int_near + int_far
 
     return np.vectorize(_dphi_de_e)(e, dist, r_s, rho_s, gamma)
@@ -198,10 +205,11 @@ def J_factor(dist, r_s, rho_s, gamma, halo, th_max):
     def _J_factor(dist, r_s, rho_s, gamma):
         args = (th_max, dist, r_s, rho_s, gamma)
         # Split integral around center of clump
-        int_near = quad(dJ_dr, 0., dist, args, points=[dist], epsabs=0,
-                        epsrel=1e-5)[0]
-        int_far = quad(dJ_dr, dist, 10.*dist, args, points=[dist], epsabs=0,
-                       epsrel=1e-5)[0]
+        int_near, err_near = quad(dJ_dr, 0., dist, args, points=[dist], epsabs=0,
+                        epsrel=1e-5)
+        int_far, err_far = quad(dJ_dr, dist, 10.*dist, args, points=[dist], epsabs=0,
+                       epsrel=1e-5)
+        # print("J_factor(): %.2e, %.2e" % (err_near / int_near, err_far / int_far))
 
         return (int_near + int_far) * kpc_to_cm
 
@@ -209,7 +217,7 @@ def J_factor(dist, r_s, rho_s, gamma, halo, th_max):
 
 
 def dphi_de_g(e, dist, r_s, rho_s, gamma, halo, th_max,
-              mx=dampe_excess_bin_high, sv=3e-26, fx=2):
+              mx=dampe_excess_bin_high, sv=3e-26, fx=1.):
     """Computes dphi/dE|_gamma for a DM clump.
 
     Parameters
@@ -244,7 +252,7 @@ def dphi_de_g(e, dist, r_s, rho_s, gamma, halo, th_max,
     return np.vectorize(_dphi_de_g)(e, dist, r_s, rho_s, gamma)
 
 
-def rho_s_dampe(dist, r_s, gamma, halo, bg_flux=bg_dampe, sv=3e-26, fx=2):
+def rho_s_dampe(dist, r_s, gamma, halo, bg_flux=bg_dampe, sv=3e-26, fx=1.):
     """Get density normalization giving best fit to excess.
 
     Parameters
@@ -283,16 +291,22 @@ def rho_s_dampe(dist, r_s, gamma, halo, bg_flux=bg_dampe, sv=3e-26, fx=2):
         args = (dist, r_s, 1., gamma, mx, sv, fx)
         # Improve numerical stability by splitting the spatial integral. The
         # factor of 2 accounts for DAMPE measuring e+ and e-.
-        dm_iflux_near = 2.*dblquad(
+        dm_iflux_near, err_near = dblquad(
             dphi2_de_dr,
             dampe_excess_bin_low, dampe_excess_bin_high,
             lambda e: 0, lambda e: dist,
-            args=args, epsabs=0, epsrel=1e-5)[0]
-        dm_iflux_far = 2.*dblquad(
+            args=args, epsabs=0, epsrel=1e-5)
+        dm_iflux_near *= 2
+        err_near *= 2
+        dm_iflux_far, err_far = dblquad(
             dphi2_de_dr,
             dampe_excess_bin_low, dampe_excess_bin_high,
             lambda e: dist, lambda e: 10.*dist,
-            args=args, epsabs=0, epsrel=1e-5)[0]
+            args=args, epsabs=0, epsrel=1e-5)
+        dm_iflux_far *= 2
+        err_far *= 2
+        # print("rho_s_dampe(): %.2e, %.2e" % (err_near / dm_iflux_near,
+        #                                      err_far / dm_iflux_far))
 
         return np.sqrt(residual_iflux / (dm_iflux_near + dm_iflux_far))
 
@@ -300,7 +314,7 @@ def rho_s_dampe(dist, r_s, gamma, halo, bg_flux=bg_dampe, sv=3e-26, fx=2):
 
 
 def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e,
-                     thresh=0.5, mx=dampe_excess_bin_high, sv=3e-26, fx=2):
+                     thresh=0.5, mx=dampe_excess_bin_high, sv=3e-26, fx=1.):
     """Computes the angular extent of the subhalo at a specific gamma ray
     energy.
 
@@ -330,8 +344,7 @@ def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e,
     """
     def _gamma_ray_extent(dist, r_s, rho_s, gamma):
         # Compute flux integrating over the whole sky
-        total_flux = dphi_de_g(e, dist, r_s, rho_s, gamma, halo, np.pi, mx, sv,
-                               fx)
+        total_flux = dphi_de_g(e, dist, r_s, rho_s, gamma, halo, np.pi, mx, sv, fx)
 
         def loss(log10_th):
             return (dphi_de_g(e, dist, r_s, rho_s, gamma, halo, 10.**log10_th,
@@ -364,7 +377,7 @@ def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e,
 
 def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3.,
                           bg_flux=bg_dampe, mx=dampe_excess_bin_high, sv=3e-26,
-                          fx=2, excluded_idxs=[]):
+                          fx=1., excluded_idxs=[]):
     """Returns significance of largest excess in a DAMPE bin aside from the one
     with the true excess.
 
@@ -409,8 +422,11 @@ def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3.,
         for (e_low, e_high), res, err in zip(bins, residual_ifluxes,
                                                iflux_errs):
             # Factor of 2 is needed because DAMPE measures e+ and e-
-            dm_iflux = 2.*quad(dphi_de_e, e_low, e_high, args, epsabs=0,
-                               epsrel=1e-5)[0]
+            dm_iflux, err = quad(dphi_de_e, e_low, e_high, args, epsabs=0,
+                                 epsrel=1e-5)
+            dm_iflux *= 2.
+            err *= 2.
+            # print("lw_constraint(): %.2e" % (err / dm_iflux))
             # Determine significance of DM contribution
             n_sigma_bin = (dm_iflux - res) / err
             n_sigma_max = max(n_sigma_bin, n_sigma_max)
@@ -421,7 +437,7 @@ def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3.,
 
 
 def fermi_point_src_contraint(dist, r_s, gamma, halo,
-                              mx=dampe_excess_bin_high, sv=3e-26, fx=2,
+                              mx=dampe_excess_bin_high, sv=3e-26, fx=1.,
                               e_star=230.):
     """Computes the maximum halo density normalization consistent with Fermi's
     non-observation of point sources coming from DM clumps.
@@ -448,7 +464,7 @@ def fermi_point_src_contraint(dist, r_s, gamma, halo,
 
 def integrated_aniso(dist, r_s, rho_s, gamma, halo, e_low=e_low_aniso_fermi[-1],
                      e_high=e_high_aniso_fermi[-1], bg_flux=bg_dampe,
-                     mx=dampe_excess_bin_high, sv=3e-26, fx=2):
+                     mx=dampe_excess_bin_high, sv=3e-26, fx=1.):
     """Computes delta(e), the differential e+- anisotropy.
 
     TODO: fix this!!!
@@ -484,7 +500,7 @@ def integrated_aniso(dist, r_s, rho_s, gamma, halo, e_low=e_low_aniso_fermi[-1],
 
 
 def differential_aniso(e, dist, r_s, rho_s, gamma, halo, bg_flux=bg_dampe,
-                       mx=dampe_excess_bin_high, sv=3e-26, fx=2):
+                       mx=dampe_excess_bin_high, sv=3e-26, fx=1.):
     """Computes delta(e), the differential e+- anisotropy.
     """
     if halo == "exp":
@@ -512,7 +528,7 @@ def differential_aniso(e, dist, r_s, rho_s, gamma, halo, bg_flux=bg_dampe,
 
 
 #def anisotropy_constraint(dist, r_s, rho_s, gamma, halo, bg_flux=bg_dampe,
-#                          mx=dampe_excess_bin_high, sv=3e-26, fx=2,
+#                          mx=dampe_excess_bin_high, sv=3e-26, fx=1.,
 #                          debug=False):
 #    """Computes the ratio of the clump e-+e+ anisotropy to the Fermi anisotropy
 #    bound in its highest-energy bin.
