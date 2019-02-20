@@ -274,7 +274,7 @@ def lambda_prop(e, mx):
     lambda : numpy array
         lambda in cm^2
     """
-    if e > mx:
+    if e >= mx:
         return 0.
     else:
         return D0*((e/e0)**delta*e0**2*mx - e*e0**2*(mx/e0)**delta) / \
