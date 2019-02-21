@@ -8,22 +8,48 @@ from scipy.special import gamma as Gamma
 from scipy.special import beta
 from scipy.special import betainc
 
-from background_models import bg_dampe
-from constants import e_low_aniso_fermi, e_high_aniso_fermi, aniso_fermi
-from constants import kpc_to_cm, rho_critical, GeV_to_m_sun, fermi_psf
-from constants import speed_of_light, D, rho_max, lambert_w_series
-from constants import dampe_excess_bin_low, dampe_excess_bin_high
-from constants import dampe_excess_iflux, dn_de_gamma_AP
-from constants import dampe_bins, dampe_dflux, dampe_dflux_err
-from constants import fermi_pt_src_sens_120_45 as fermi_pt_src_sens
-from constants import gamma_inc_upper
-from nfw_clump import dphi2_de_dr_llc as dphi2_de_dr_nfw_llc
+from dm_params import mx, fx, sv
+from background_models import Phi_e_bg, phi_e_bg_dampe, phi_e_bg_alt
+from utilities import e_low_aniso_fermi, e_high_aniso_fermi, aniso_fermi
+from utilities import kpc_to_cm, rho_critical, GeV_to_m_sun, fermi_psf
+from utilities import speed_of_light, D, rho_max, lambert_w_series
+from utilities import e_low_excess, e_high_excess
+from utilities import Phi_excess, dn_de_g_ap
+from utilities import bins_dampe, phis_dampe, phi_errs_dampe
+from utilities import fermi_pt_src_sens_120_45 as fermi_pt_src_sens
+from utilities import gamma_inc_upper
+
+from nfw_clump import rho as rho_nfw
+from nfw_clump import mass as mass_nfw
+from nfw_clump import luminosity as luminosity_nfw
+from nfw_clump import dphi_e_dr_llc as dphi_e_dr_nfw_llc
 from nfw_clump import dJ_dr_llc as dJ_dr_nfw_llc
-from nfw_clump import aniso_numerator_de_dr_dd_llc as aniso_numerator_de_dr_dd_nfw_llc
-from tt_clump import dphi2_de_dr as dphi2_de_dr_tt
-from tt_clump import dJ_dr as dJ_dr_tt
-# from tt_clump import dphi3_de_dr_dd as dphi3_de_dr_dd_exp
-from tt_clump import ann_plateau_radius as ann_plateau_radius_exp
+
+from exp_clump import rho as rho_exp
+from exp_clump import mass as mass_exp
+from exp_clump import luminosity as luminosity_exp
+from exp_clump import dphi_e_dr_llc as dphi_e_dr_exp_llc
+from exp_clump import dJ_dr_llc as dJ_dr_exp_llc
+from exp_clump import ann_plateau_radius as ann_plateau_radius_exp
+
+
+@np.vectorize
+def get_points_near_far(dist, r_s):
+    n_near_pts = 20
+    n_far_pts = 20
+    if r_s / dist > 1:
+        points_near = np.append(
+            dist*(1 - np.logspace(-6, 0, n_near_pts)), dist)
+    else:
+        points_near = np.append(
+            dist - np.logspace(-6, 0, n_near_pts) * r_s, dist)
+    points_far = np.append(
+            dist + np.logspace(np.log10(1e-6 * r_s), np.log10(9 * max(dist, r_s)), n_far_pts), dist)
+    assert np.all(0 <= points_near)
+    assert np.all(points_near <= dist)
+    assert np.all(dist <= points_far)
+    assert np.all(points_far <= 11 * max(dist, r_s))
+    return points_near, points_far
 
 
 def rho(dist, r_s, rho_s, gamma, halo):
@@ -42,18 +68,9 @@ def rho(dist, r_s, rho_s, gamma, halo):
         Halo density at specified point in GeV / cm^3.
     """
     if halo == "nfw":
-        def _rho(dist, r_s, rho_s, gamma):
-            return rho_s * (r_s / dist)**gamma * \
-                    (1. + dist / r_s)**(gamma - 3.)
+        return rho_nfw(dist, r_s, rho_s, gamma)
     elif halo == "exp":
-        def _rho(dist, r_s, rho_s, gamma):
-            r_p = ann_plateau_radius_exp(r_s, rho_s, gamma)
-            if dist < r_p:
-                return rho_max
-            else:
-                return rho_s * (r_s / dist)**gamma * np.exp(-dist / r_s)
-
-    return np.vectorize(_rho)(dist, r_s, rho_s, gamma)
+        return rho_exp(dist, r_s, rho_s, gamma)
 
 
 def mass(r_s, rho_s, gamma, halo):
@@ -71,67 +88,21 @@ def mass(r_s, rho_s, gamma, halo):
         (number of solar masses)
     """
     if halo == "nfw":
-        def _mass(r_s, rho_s, gamma):
-            # Find virial mass numerically. The "magic number" of 10000 should
-            # be fine for this project.
-            try:
-                def _r_vir_integrand(r):
-                    return (rho(r, r_s, rho_s, gamma, halo) -
-                            200. * rho_critical)
-
-                r_vir = brentq(_r_vir_integrand, 0.01 * r_s, 100. * r_s,
-                               xtol=1e-200)
-            except RuntimeError:
-                r_vir = np.nan
-
-            # Integrate numerically: analytic result has an imaginary part
-            factor = 4.*np.pi * GeV_to_m_sun * kpc_to_cm**3
-
-            def _mass_integrand(r):
-                return r**2 * rho(r, r_s, rho_s, gamma, halo)
-
-            return factor * quad(_mass_integrand, 0, r_vir, epsabs=0,
-                                 epsrel=1e-5)[0]
+        return mass_nfw(r_s, rho_s, gamma)
     elif halo == "exp":
-        def _mass(r_s, rho_s, gamma):
-            return (4. * np.pi * rho_s * (r_s * kpc_to_cm)**3 *
-                    Gamma(3. - gamma)) * GeV_to_m_sun
-
-    return np.vectorize(_mass)(r_s, rho_s, gamma)
+        return mass_exp(r_s, rho_s, gamma)
 
 
-def luminosity(r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high, sv=3e-26,
-               fx=1.):
+def luminosity(r_s, rho_s, gamma, halo):
     """Computes the halo luminosity (Hz).
     """
-    factor = sv / (2*fx*mx**2)
-
     if halo == "nfw":
-        def _luminosity(r_s, rho_s, gamma):
-            rs_cm = kpc_to_cm * r_s
-            L_clump = ((4*np.pi*rho_s**2*rs_cm**3) /
-                       (30 - 47*gamma + 24*gamma**2 - 4*gamma**3))
-            return factor * L_clump
+        return luminosity_nfw(r_s, rho_s, gamma)
     elif halo == "exp":
-        def _luminosity(r_s, rho_s, gamma):
-            # No annihilation plateau
-            Rb_cm = kpc_to_cm * r_s
-            L_clump = (2**(-1 + 2*gamma) * np.pi * Rb_cm**3 * rho_s**2 *
-                       Gamma(3 - 2*gamma))
-            return factor * L_clump
-            # With annihilation plateau
-            # Rb_cm = kpc_to_cm * r_s
-            # r_p_cm = kpc_to_cm * ann_plateau_radius_exp(r_s, rho_s, gamma)
-            # return np.pi/6. * factor * (3. * 4.**gamma * rho_s**2 * Rb_cm**3 *
-            #                             gamma_inc_upper(3. - 2. * gamma,
-            #                                             2. * r_p_cm / Rb_cm) +
-            #                             8. * rho_max**2 * r_p_cm**3)
-
-    return np.vectorize(_luminosity)(r_s, rho_s, gamma)
+        return luminosity_exp(r_s, rho_s, gamma)
 
 
-def lum_to_rho_norm(r_s, lum, gamma, halo, mx=dampe_excess_bin_high, sv=3e-26,
-                    fx=1.):
+def lum_to_rho_norm(r_s, lum, gamma, halo):
     """Determines the halo's density normalization given its luminosity.
 
     Notes
@@ -139,12 +110,11 @@ def lum_to_rho_norm(r_s, lum, gamma, halo, mx=dampe_excess_bin_high, sv=3e-26,
     Assumes the luminosity is proportional to the density normalization
     squared.
     """
-    return np.sqrt(lum / luminosity(r_s, 1., gamma, halo, mx, sv, fx))
+    return np.sqrt(lum / luminosity(r_s, 1., gamma, halo))
 
 
-def dphi_de_e(e, dist, r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high,
-              sv=3e-26, fx=1.):
-    """Computes dphi/dE|_{e-} for a DM clump.
+def phi_e(e, dist, r_s, rho_s, gamma, halo, epsrel=1e-5, limit=50):
+    """Computes the differential flux phi|_{e-} for a DM clump.
 
     Parameters
     ----------
@@ -152,33 +122,31 @@ def dphi_de_e(e, dist, r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high,
         Electron energies, GeV.
     d : float
         Distance to the clump's center, kpc.
-    mx : float
-        DM mass, GeV.
-    sv : float
-        DM self-annihilation cross section, cm^3/s.
     gamma : float
         NFW power index.
     """
     if halo == "nfw":
-        dphi2_de_dr = dphi2_de_dr_nfw_llc
+        dphi_e_dr = dphi_e_dr_nfw_llc
     elif halo == "exp":
-        dphi2_de_dr = dphi2_de_dr_tt
+        dphi_e_dr = dphi_e_dr_exp_llc
 
-    def _dphi_de_e(e, dist, r_s, rho_s, gamma):
+    @np.vectorize
+    def _phi_e(e, dist, r_s, rho_s, gamma, epsrel=1e-5):
         if e > mx:
             return 0.
         else:  # perform integration over r
             args = (e, dist, r_s, rho_s, gamma, mx, sv, fx)
             # Split integral around center of clump
-            int_near, err_near = quad(dphi2_de_dr, 0, dist, args,
-                                      points=[0.99*dist, 0.995*dist, 0.999*dist, dist],
-                                      epsabs=0, epsrel=1e-5)
-            int_far, err_far = quad(dphi2_de_dr, dist, 10.*dist, args,
-                                    points=[dist, 1.001*dist, 1.005*dist, 1.01*dist],
-                                    epsabs=0, epsrel=1e-5)
-            return int_near + int_far
+            points_near, points_far = get_points_near_far(dist, r_s)
+            phi_e_near, err_near = quad(dphi_e_dr, 0, dist, args,
+                                        points=points_near,
+                                        epsabs=0, epsrel=epsrel, limit=limit)
+            phi_e_far, err_far = quad(dphi_e_dr, dist, dist + 10*r_s, args,
+                                      points=points_far,
+                                      epsabs=0, epsrel=epsrel, limit=limit)
+            return phi_e_near + phi_e_far
 
-    return np.vectorize(_dphi_de_e)(e, dist, r_s, rho_s, gamma)
+    return _phi_e(e, dist, r_s, rho_s, gamma)
 
 
 def J_factor(dist, r_s, rho_s, gamma, halo, th_max):
@@ -204,21 +172,24 @@ def J_factor(dist, r_s, rho_s, gamma, halo, th_max):
     if halo == "nfw":
         dJ_dr = dJ_dr_nfw_llc
     elif halo == "exp":
-        dJ_dr = dJ_dr_tt
+        dJ_dr = dJ_dr_exp_llc
 
+    @np.vectorize
     def _J_factor(dist, r_s, rho_s, gamma):
         args = (th_max, dist, r_s, rho_s, gamma)
         # Split integral around center of clump
-        int_near, err_near = quad(dJ_dr, 0., dist, args, points=[dist], epsabs=0, epsrel=1e-5)
-        int_far, err_far = quad(dJ_dr, dist, 10.*dist, args, points=[dist], epsabs=0, epsrel=1e-5)
-        return (int_near + int_far) * kpc_to_cm
+        points_near, points_far = get_points_near_far(dist, r_s)
+        # Split integral around center of clump
+        J_near, err_near = quad(dJ_dr, 0., dist, args, points=points_near, epsabs=0, epsrel=1e-5)
+        J_far, err_far = quad(dJ_dr, dist, dist + 10*r_s, args, points=points_far, epsabs=0, epsrel=1e-5)
+        return (J_near + J_far) * kpc_to_cm
 
-    return np.vectorize(_J_factor)(dist, r_s, rho_s, gamma)
+    return _J_factor(dist, r_s, rho_s, gamma)
 
 
-def dphi_de_g(e, dist, r_s, rho_s, gamma, halo, th_max,
-              mx=dampe_excess_bin_high, sv=3e-26, fx=1.):
-    """Computes dphi/dE|_gamma for a DM clump.
+@np.vectorize
+def phi_g(e, dist, r_s, rho_s, gamma, halo, th_max):
+    """Computes the differential flux phi|_gamma for a DM clump.
 
     Notes
     -----
@@ -232,8 +203,6 @@ def dphi_de_g(e, dist, r_s, rho_s, gamma, halo, th_max,
         Angular radius of observing region (rad)
     d : float
         Distance to clump center in kpc
-    mx : float
-        DM mass in GeV
     sv : float
         DM self-annihilation cross section in cm^3 / s
     fx : int
@@ -243,82 +212,59 @@ def dphi_de_g(e, dist, r_s, rho_s, gamma, halo, th_max,
     -------
         Photon flux at earth from target region in (GeV cm^2 s sr)^{-1}
     """
-    def _dphi_de_g(e, dist, r_s, rho_s, gamma):
-        if e >= mx:
-            return 0.
-        else:
-            dOmega = 2*np.pi*(1.-np.cos(th_max))
-            J = J_factor(dist, r_s, rho_s, gamma, halo, th_max)  # GeV^2 / cm^5
-            ret_val = (dOmega/(4*np.pi) * J * sv / (2.*fx*mx**2) *
-                       dn_de_gamma_AP(e, mx))
-            return ret_val
-
-    return np.vectorize(_dphi_de_g)(e, dist, r_s, rho_s, gamma)
+    dOmega = 2*np.pi*(1.-np.cos(th_max))
+    J = J_factor(dist, r_s, rho_s, gamma, halo, th_max)  # GeV^2 / cm^5
+    dn_de_g = np.vectorize(dn_de_g_ap)(e, mx)
+    return dOmega/(4*np.pi) * J * sv / (2.*fx*mx**2) * dn_de_g
 
 
-def rho_s_dampe(dist, r_s, gamma, halo, bg_flux=bg_dampe, sv=3e-26, fx=1.):
+def rho_s_dampe(dist, r_s, gamma, halo, bg_model="dampe"):
     """Get density normalization giving best fit to excess.
-
-    Parameters
-    ----------
-    d : float
-        Distance to the clump's center, kpc.
-    bg_flux : float -> float
-        Background flux in (GeV cm^2 s sr)^-1
-    sv : float
-        DM self-annihilation cross section, cm^3/s.
 
     Returns
     -------
     rho_s : float
         Density normalization in GeV / cm^3.
     """
-    mx = dampe_excess_bin_high
+    if halo == "nfw":
+        dphi_e_dr = dphi_e_dr_nfw_llc
+    elif halo == "exp":
+        dphi_e_dr = dphi_e_dr_exp_llc
 
     # Residual integrated flux
-    @cfunc(float64(float64))
-    def bg_flux_cf(e):
-        return bg_flux(e)
-    bg_flux_LLC = LowLevelCallable(bg_flux_cf.ctypes)
-    bg_iflux = quad(bg_flux_LLC, dampe_excess_bin_low, dampe_excess_bin_high,
-                    epsabs=0, epsrel=1e-5)[0]
-    residual_iflux = dampe_excess_iflux - bg_iflux
+    Phi_bg = Phi_e_bg(e_low_excess, e_high_excess, bg_model)
+    Phi_e_residual = Phi_excess - Phi_bg
 
-    if halo == "nfw":
-        dphi2_de_dr = dphi2_de_dr_nfw_llc
-    elif halo == "exp":
-        dphi2_de_dr = dphi2_de_dr_tt
-
+    @np.vectorize
     def _rho_s_dampe(dist, r_s, gamma):
-        # Set rho_s to 1 and use the fact that the flux is proportional to
-        # rho_s**2
+        # Set rho_s to 1 and use that the flux is proportional to rho_s**2
+        points_e = e_high_excess * (1 - np.logspace(-6, -1, 10))
+        # Improve numerical stability by splitting the spatial integral
         args = (dist, r_s, 1., gamma, mx, sv, fx)
-        # Improve numerical stability by splitting the spatial integral. The
-        # factor of 2 accounts for DAMPE measuring e+ and e-.
-        dm_iflux_near, err_near = nquad(
-            dphi2_de_dr, args=args,
-            ranges=[(0, dist), (dampe_excess_bin_low, dampe_excess_bin_high)],
-            opts=[{"epsabs": 0, "epsrel": 1e-5, "points": np.array([0.99, 0.995, 0.999])*dist},
-                  {"epsabs": 0, "epsrel": 1e-5, "points": np.array([0.99, 0.995, 0.999])*dampe_excess_bin_high}])
-        dm_iflux_near *= 2
-        err_near *= 2
-        dm_iflux_far, err_far = nquad(
-            dphi2_de_dr, args=args,
-            ranges=[(dist, 10*dist), (dampe_excess_bin_low, dampe_excess_bin_high)],
-            opts=[{"epsabs": 0, "epsrel": 1e-5, "points": np.array([0.99, 0.995, 0.999])*dist},
-                  {"epsabs": 0, "epsrel": 1e-5, "points": np.array([0.99, 0.995, 0.999])*dampe_excess_bin_high}])
-        dm_iflux_far *= 2
-        err_far *= 2
-        # print("rho_s_dampe(): %.2e, %.2e" % (err_near / dm_iflux_near,
-        #                                      err_far / dm_iflux_far))
+        points_near, points_far = get_points_near_far(dist, r_s)
+        Phi_e_near, err_near = nquad(
+            dphi_e_dr, args=args, ranges=[(0, dist), (e_low_excess, e_high_excess)],
+            opts=[{"epsabs": 0, "epsrel": 1e-5, "points": points_near},
+                  {"epsabs": 0, "epsrel": 1e-5, "points": points_e}])
+        Phi_e_far, err_far = nquad(
+            dphi_e_dr, args=args, ranges=[(dist, dist + 10*r_s), (e_low_excess, e_high_excess)],
+            opts=[{"epsabs": 0, "epsrel": 1e-5, "points": points_far},
+                  {"epsabs": 0, "epsrel": 1e-5, "points": points_e}])
+        # Try just integrating the spectrum function
+        # args = (dist, r_s, 1., gamma, halo)
+        # Phi_e_near, err_near = quad(phi_e)
+        # print(dist, r_s)
+        # print("Phi_e_near = ", Phi_e_near, "+/-", err_near)
+        # print("Phi_e_far = ", Phi_e_far, "+/-", err_far)
+        # print("")
+        # Factor of 2 accounts for DAMPE measuring e+ and e-
+        return np.sqrt(Phi_e_residual / (2*Phi_e_near + 2*Phi_e_far))
 
-        return np.sqrt(residual_iflux / (dm_iflux_near + dm_iflux_far))
-
-    return np.vectorize(_rho_s_dampe)(dist, r_s, gamma)
+    return _rho_s_dampe(dist, r_s, gamma)
 
 
-def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e,
-                     thresh=0.5, mx=dampe_excess_bin_high, sv=3e-26, fx=1.):
+@np.vectorize
+def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e, thresh=0.5):
     """Computes the angular extent of the subhalo at a specific gamma ray
     energy.
 
@@ -328,8 +274,6 @@ def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e,
         Gamma ray energy (GeV).
     d : float
         Distance to subhalo (kpc).
-    mx : float
-        DM mass (GeV).
     r_s : float
         Subhalo scale radius (kpc).
     rho_s : float
@@ -346,42 +290,34 @@ def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e,
         Radius of observing region such that the flux in the region is equal to
         thresh times the total flux.
     """
-    def _gamma_ray_extent(dist, r_s, rho_s, gamma):
-        # Compute flux integrating over the whole sky
-        total_flux = dphi_de_g(e, dist, r_s, rho_s, gamma, halo, np.pi, mx, sv, fx)
+    # Compute flux integrating over the whole sky
+    phi_g_tot = phi_g(e, dist, r_s, rho_s, gamma, halo, np.pi)
 
-        def loss(log10_th):
-            return (dphi_de_g(e, dist, r_s, rho_s, gamma, halo, 10.**log10_th,
-                              mx, sv, fx) / total_flux - thresh)**2
+    @np.vectorize
+    def loss(log10_th):
+        return (phi_g(e, dist, r_s, rho_s, gamma, halo, 10.**log10_th) / phi_g_tot - thresh)**2
 
-        bracket_low = np.log10(1e-6 * fermi_psf)
-        bracket_high = np.log10(0.99 * np.pi)
-        # Hacky but effective way of finding a bracketing interval
-        log10_ths = np.linspace(bracket_low, bracket_high, 20)
-        losses = np.vectorize(loss)(log10_ths)
-        bracket_middle = log10_ths[np.nanargmin(losses)]
-        # Make sure loss at bracket endpoints is defined
-        bracket_low = log10_ths[np.where(~np.isnan(losses))[0]][0]
-        bracket_high = log10_ths[np.where(~np.isnan(losses))[0]][-1]
+    bracket_low = np.log10(1e-6 * fermi_psf)
+    bracket_high = np.log10(0.99 * np.pi)
+    # Hacky but effective way of finding a bracketing interval
+    log10_ths = np.linspace(bracket_low, bracket_high, 20)
+    losses = loss(log10_ths)
+    bracket_middle = log10_ths[np.nanargmin(losses)]
+    # Make sure loss at bracket endpoints is defined
+    bracket_low = log10_ths[np.where(~np.isnan(losses))[0]][0]
+    bracket_high = log10_ths[np.where(~np.isnan(losses))[0]][-1]
 
-        # Do not optimize if rho_s is nan
-        if not np.isnan(rho_s):
-            log10_th = minimize_scalar(
-                loss,
-                bracket=(bracket_low,
-                         bracket_middle,
-                         bracket_high),
-                bounds=(fermi_psf, np.pi)).x
-            return 10.**log10_th
-        else:
-            return np.nan
-
-    return np.vectorize(_gamma_ray_extent)(dist, r_s, rho_s, gamma)
+    # Do not optimize if rho_s is nan
+    if not np.isnan(rho_s):
+        log10_th = minimize_scalar(loss,
+                                   bracket=(bracket_low, bracket_middle, bracket_high),
+                                   bounds=(fermi_psf, np.pi)).x
+        return 10.**log10_th
+    else:
+        return np.nan
 
 
-def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3.,
-                          bg_flux=bg_dampe, mx=dampe_excess_bin_high, sv=3e-26,
-                          fx=1., excluded_idxs=[]):
+def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3., bg_model="dampe", excluded_idxs=[]):
     """Returns significance of largest excess in a DAMPE bin aside from the one
     with the true excess.
 
@@ -389,60 +325,47 @@ def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3.,
     DM flux integrals.
     """
     # Get index of bin containing the DM mass
-    mx_idx = np.digitize(dampe_excess_bin_high,
-                         np.unique(dampe_bins.flatten()),
-                         right=True)
+    mx_idx = np.digitize(mx, np.unique(bins_dampe.flatten()), right=True)
 
     # Reverse the list since constraint is likely to be set by bin closest to
     # the excess.
-    idxs = set(range(len(dampe_bins))) - set(excluded_idxs)
-    idxs = idxs - set(range(mx_idx, dampe_bins.shape[0]))
+    idxs = set(range(len(bins_dampe))) - set(excluded_idxs)
+    idxs = idxs - set(range(mx_idx, bins_dampe.shape[0]))
     idxs = sorted(list(idxs))
     idxs.reverse()
+    # Select the bins that were not excluded
+    bins = bins_dampe[idxs]
+    phis = phis_dampe[idxs]
+    phi_errs = phi_errs_dampe[idxs]
 
-    bins = dampe_bins[idxs]
-    dfluxes = dampe_dflux[idxs]
-    dflux_errs = dampe_dflux_err[idxs]
+    Phi_residual = []
+    Phi_errs = []
+    for (e_low, e_high), phi, err in zip(bins, phis, phi_errs):
+        Phi_dampe = (e_high - e_low) * phi
+        Phi_bg = Phi_e_bg(e_low, e_high, bg_model)
+        Phi_residual.append(Phi_dampe - Phi_bg)
+        Phi_errs.append((e_high - e_low) * err)
 
-    # Compute residual integrated flux in each relevant bin
-    @cfunc(float64(float64))
-    def bg_flux_cf(e):
-        return bg_flux(e)
-    bg_flux_LLC = LowLevelCallable(bg_flux_cf.ctypes)
-
-    residual_ifluxes = []
-    iflux_errs = []
-    for (e_low, e_high), flux, err in zip(bins, dfluxes, dflux_errs):
-        # Integrated flux
-        dampe_iflux = (e_high - e_low) * flux
-        bg_iflux = quad(bg_flux_LLC, e_low, e_high, epsabs=0, epsrel=1e-5)[0]
-        residual_ifluxes.append(dampe_iflux - bg_iflux)
-        # Error on integrated flux
-        iflux_errs.append((e_high - e_low) * err)
-
+    @np.vectorize
     def _line_width_constraint(dist, r_s, rho_s, gamma):
-        args = (dist, r_s, rho_s, gamma, halo, mx, sv, fx)
+        args = (dist, r_s, rho_s, gamma, halo)
         n_sigma_max = 0.
-        for (e_low, e_high), res, err in zip(bins, residual_ifluxes,
-                                               iflux_errs):
+        for (e_low, e_high), Phi_res, Phi_err in zip(bins, Phi_residual, Phi_errs):
             # Factor of 2 is needed because DAMPE measures e+ and e-
-            dm_iflux, err = quad(dphi_de_e, e_low, e_high, args, epsabs=0,
-                                 epsrel=1e-5)
-            dm_iflux *= 2.
-            err *= 2.
-            # print("lw_constraint(): %.2e" % (err / dm_iflux))
+            # The integrand is not sharply peaked outside the bin with the
+            # excess, so we don't need to set `points`.
+            Phi_clump = 2 * quad(phi_e, e_low, e_high, args, epsabs=0, epsrel=1e-5)[0]
             # Determine significance of DM contribution
-            n_sigma_bin = (dm_iflux - res) / err
+            n_sigma_bin = (Phi_clump - Phi_res) / Phi_err
             n_sigma_max = max(n_sigma_bin, n_sigma_max)
-
+            if n_sigma_max >= n_sigma:  # stop if threshold was exceeded
+                return n_sigma_max
         return n_sigma_max
 
-    return np.vectorize(_line_width_constraint)(dist, r_s, rho_s, gamma)
+    return _line_width_constraint(dist, r_s, rho_s, gamma)
 
 
-def fermi_point_src_contraint(dist, r_s, gamma, halo,
-                              mx=dampe_excess_bin_high, sv=3e-26, fx=1.,
-                              e_star=230.):
+def fermi_point_src_contraint(dist, r_s, gamma, halo, e_star=230.):
     """Computes the maximum halo density normalization consistent with Fermi's
     non-observation of point sources coming from DM clumps.
 
@@ -459,27 +382,30 @@ def fermi_point_src_contraint(dist, r_s, gamma, halo,
     rho_s : float
         The maximum density normalization allowed by Fermi point source bounds.
     """
-    dphi_de_g_dm = dphi_de_g(e_star, dist, r_s, 1, gamma, halo, fermi_psf, mx,
-                             sv, fx)
-    dphi_de_g_fermi = fermi_pt_src_sens(e_star)
-
-    return np.sqrt(dphi_de_g_fermi / dphi_de_g_dm)
+    phi_g_clump = phi_g(e_star, dist, r_s, 1, gamma, halo, fermi_psf)
+    phi_g_sens = fermi_pt_src_sens(e_star)
+    return np.sqrt(phi_g_sens / phi_g_clump)
 
 
-def aniso_diff(e, dist, r_s, rho_s, gamma, halo, mx=dampe_excess_bin_high,
-               sv=3e-26, fx=1., delta_d_rel=0.001):
-    # Compute derivative with respect to distance numerically. In the cases
-    # I've checked, the results are insensitive to delta_d_rel.
-    Phi_d = dphi_de_e(e, dist, r_s, rho_s, gamma, halo, mx, sv, fx)
+def anisotropy_differential(e, dist, r_s, rho_s, gamma, halo,
+                            delta_d_rel=0.001, bg_model="dampe"):
+    # Compute derivative with respect to distance numerically
+    if bg_model == "dampe":
+        phi_e_bg = phi_e_bg_dampe(e)
+    elif bg_model == "alt":
+        phi_e_bg = phi_e_bg_alt(e)
+    phi_e_d = phi_e(e, dist, r_s, rho_s, gamma, halo, epsrel=1e-3*delta_d_rel)
     delta_d = delta_d_rel * dist
-    Phi_d_dd = dphi_de_e(e, dist + delta_d, r_s, rho_s, gamma, halo, mx, sv, fx)
-    dPhi_dd = np.abs((Phi_d_dd - Phi_d) / delta_d)
-    Phi_tot = Phi_d + bg_dampe(es)
-    return 3 * D(e) / speed_of_light * dPhi_dd / kpc_to_cm / Phi_tot
+    phi_e_d_dd = phi_e(e, dist + delta_d, r_s, rho_s, gamma, halo, epsrel=1e-3*delta_d_rel)
+    dphi_e_dd = np.abs((phi_e_d_dd - phi_e_d) / delta_d)
+    # print("dphi, dd = ", phi_e_d_dd - phi_e_d, delta_d)
+    # dphi_e_dd = (phi_e_d_dd - phi_e_d) / delta_d
+    phi_e_tot = phi_e_d + phi_e_bg
+    return 3 * D(e) / speed_of_light * dphi_e_dd / kpc_to_cm / phi_e_tot
 
 
 #def anisotropy_constraint(dist, r_s, rho_s, gamma, halo, bg_flux=bg_dampe,
-#                          mx=dampe_excess_bin_high, sv=3e-26, fx=1.,
+#                          mx=e_high_excess, sv=3e-26, fx=1.,
 #                          debug=False):
 #    """Computes the ratio of the clump e-+e+ anisotropy to the Fermi anisotropy
 #    bound in its highest-energy bin.

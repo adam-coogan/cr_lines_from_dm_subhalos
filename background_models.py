@@ -1,9 +1,12 @@
-from numba import jit
+from numba import cfunc, jit
+from numba.types import float64, CPointer, intc
 import numpy as np
+from scipy import LowLevelCallable
+from scipy.integrate import quad
 
 
-@jit(nopython=True)
-def bg_dampe(e):
+
+def phi_e_bg_dampe(e):
     """Official DAMPE background model for the e+ e- flux
 
     Parameters
@@ -25,9 +28,14 @@ def bg_dampe(e):
     return phi0 * (100. / e)**gamma1 * \
         (1. + (eb/e)**((gamma1 - gamma2) / delta))**(-delta)
 
+phi_e_bg_dampe_jit = jit(phi_e_bg_dampe, nopython=True)
+@cfunc(float64(float64))
+def phi_e_bg_dampe_cfunc(e):
+    return phi_e_bg_dampe_jit(e)
+phi_e_bg_dampe_llc = LowLevelCallable(phi_e_bg_dampe_cfunc.ctypes)
 
-@jit(nopython=True)
-def bg_alt(e):
+
+def phi_e_bg_alt(e):
     """Background model for the e+ e- flux from Ge et al, arXiv:1712.02744
 
     Note
@@ -57,13 +65,30 @@ def bg_alt(e):
         (1 + (ebr1 / e)**delta)**(delta_gamma1/delta) * \
         (1 + (e/ebr2)**delta)**(delta_gamma2/delta)
 
+phi_e_bg_alt_jit = jit(phi_e_bg_alt, nopython=True)
+@cfunc(float64(float64))
+def phi_e_bg_alt_cfunc(e):
+    return phi_e_bg_alt_jit(e)
+phi_e_bg_alt_llc = LowLevelCallable(phi_e_bg_alt_cfunc.ctypes)
+
+
+def Phi_e_bg(e_low, e_high, model="dampe"):
+    if model == "dampe":
+        phi_e_bg_llc = phi_e_bg_dampe_llc
+    elif model == "alt":
+        phi_e_bg_llc = phi_e_bg_alt_llc
+    else:
+        raise ValueError("Unknown background model")
+
+    return quad(phi_e_bg_llc, e_low, e_high, epsabs=0, epsrel=1e-5)[0]
+
 
 I100 = 1.48e-7 * 1e3 # GeV^-1 cm^-2 s^-1 sr^-1
 gamma_fermi = 2.31
 e_cut = 362.  # GeV
 
 @jit(nopython=True)
-def dphi_de_egb_fermi(e):
+def phi_g_egb_fermi(e):
     """Fermi extragalactic gamma ray background flux.
 
     Returns

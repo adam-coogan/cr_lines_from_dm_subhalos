@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 import numpy as np
 import ctypes
 from numba import jit, cfunc, vectorize
@@ -109,11 +110,11 @@ ams_dflux = ams_dflux * 1e-4
 ams_dflux_err = np.sqrt(ams_stat**2 + ams_syst**2) * 1e-4
 
 # Load DAMPE fluxes and bins
-dampe_bin_low, dampe_bin_high, dampe_es, dampe_dflux, dampe_stat, dampe_syst =\
+e_lows_dampe, e_highs_dampe, es_dampe, phis_dampe, stats_dampe, systs_dampe =\
         np.loadtxt("data/fluxes/electron_positron_flux_dampe.dat").T
-dampe_dflux = dampe_dflux * 1e-4
-dampe_bins = np.transpose([dampe_bin_low, dampe_bin_high])
-dampe_dflux_err = np.sqrt(dampe_stat**2 + dampe_syst**2) * 1e-4
+phis_dampe = phis_dampe * 1e-4
+bins_dampe = np.transpose([e_lows_dampe, e_highs_dampe])
+phi_errs_dampe = np.sqrt(stats_dampe**2 + systs_dampe**2) * 1e-4
 
 # Anisotropy bound on e- only from AMS (arxiv:1612.08957)
 e_low_aniso_ams, e_high_aniso_ams, aniso_ams = 16., 350., 0.006
@@ -121,10 +122,9 @@ e_low_aniso_ams, e_high_aniso_ams, aniso_ams = 16., 350., 0.006
 e_low_aniso_fermi, e_high_aniso_fermi, aniso_fermi = np.loadtxt("data/fermi_epm_aniso.csv").T
 
 # Lower and upper limits on bin with the excess
-dampe_excess_bin_low, dampe_excess_bin_high = 1318.3, 1513.6
+e_low_excess, e_high_excess = 1318.3, 1513.6
 # Integrated flux in "excess" cm^-2 s^-1 sr^-1
-dampe_excess_iflux = (dampe_excess_bin_high - dampe_excess_bin_low) * \
-        dampe_dflux[np.abs(dampe_es-1400.).argmin()]
+Phi_excess = (e_high_excess - e_low_excess) * phis_dampe[np.abs(es_dampe-1400.).argmin()]
 
 def max_dm_density(mx, sv):
     """Maximum possible DM density, GeV / cm^3.
@@ -132,25 +132,25 @@ def max_dm_density(mx, sv):
     return mx / sv / t_universe
 
 # Max DM density with fiducial parameters
-rho_max = max_dm_density(mx=dampe_excess_bin_high, sv=3e-26)
+rho_max = max_dm_density(mx=e_high_excess, sv=3e-26)
 
 # Fermi broadband flux sensitivity: max flux of a power law source at the
 # detection threshold for any power law. From here.
 # (b, l) = (120, 45)
-e_g_f_120_45, dphi_de_g_f_120_45 = np.loadtxt("data/fermi/broadband_flux_"
-                                              "sensitivity_p8r2_source_v6_all"
-                                              "_10yr_zmax100_n10.0_e1.50_ts25"
-                                              "_120_045.csv").T
+e_g_f_120_45, phi_g_f_120_45 = np.loadtxt("data/fermi/broadband_flux_"
+                                          "sensitivity_p8r2_source_v6_all"
+                                          "_10yr_zmax100_n10.0_e1.50_ts25"
+                                          "_120_045.csv").T
 e_g_f_120_45 = e_g_f_120_45 / 1e3 # MeV -> GeV
-dphi_de_g_f_120_45 = 624.15091*dphi_de_g_f_120_45 / e_g_f_120_45**2  # erg -> GeV, divide by E^2
-fermi_pt_src_sens_120_45 = interp1d(e_g_f_120_45, dphi_de_g_f_120_45, bounds_error=False)
+phi_g_f_120_45 = 624.15091*phi_g_f_120_45 / e_g_f_120_45**2  # erg -> GeV, divide by E^2
+fermi_pt_src_sens_120_45 = interp1d(e_g_f_120_45, phi_g_f_120_45, bounds_error=False)
 # (b, l) = (0, 0)
-e_g_f_0_0, dphi_de_g_f_0_0 = np.loadtxt("data/fermi/broadband_flux_sensitivity"
+e_g_f_0_0, phi_g_f_0_0 = np.loadtxt("data/fermi/broadband_flux_sensitivity"
                                         "_p8r2_source_v6_all_10yr_zmax100_n10."
                                         "0_e1.50_ts25_000_000.txt").T
 e_g_f_0_0 = e_g_f_0_0 / 1e3 # MeV -> GeV
-dphi_de_g_f_0_0 = 624.15091*dphi_de_g_f_0_0 / e_g_f_0_0**2  # erg -> GeV, divide by E^2
-fermi_pt_src_sens_0_0 = interp1d(e_g_f_0_0, dphi_de_g_f_0_0, bounds_error=False)
+phi_g_f_0_0 = 624.15091*phi_g_f_0_0 / e_g_f_0_0**2  # erg -> GeV, divide by E^2
+fermi_pt_src_sens_0_0 = interp1d(e_g_f_0_0, phi_g_f_0_0, bounds_error=False)
 
 def plot_obs_helper(bin_ls, bin_rs, vals, errs, ax, label=None, color="r",
                     alpha=0.75, lw=0.75):
@@ -191,20 +191,20 @@ def plot_obs(power, ax, highlight_excess_bins=True):
     excess_color = "steelblue"
 
     # Observations
-    plot_obs_helper(dampe_bin_low, dampe_bin_high,
-                    dampe_es**power * dampe_dflux,
-                    dampe_es**power * dampe_dflux_err,
+    plot_obs_helper(e_lows_dampe, e_highs_dampe,
+                    es_dampe**power * phis_dampe,
+                    es_dampe**power * phi_errs_dampe,
                     ax, label="DAMPE", alpha=0.3, lw=0.5, color=obs_color)
 
     if highlight_excess_bins:
         #for excess_idxs, color in zip([range(23, 28), [29]], ['r', 'b']):
         excess_idxs = [29]
-        plot_obs_helper(dampe_bin_low[excess_idxs],
-                        dampe_bin_high[excess_idxs],
-                        dampe_es[excess_idxs]**power *
-                        dampe_dflux[excess_idxs],
-                        dampe_es[excess_idxs]**power *
-                        dampe_dflux_err[excess_idxs],
+        plot_obs_helper(e_lows_dampe[excess_idxs],
+                        e_highs_dampe[excess_idxs],
+                        es_dampe[excess_idxs]**power *
+                        phis_dampe[excess_idxs],
+                        es_dampe[excess_idxs]**power *
+                        phi_errs_dampe[excess_idxs],
                         ax, alpha=0.5, lw=0.5, color=excess_color)
 
 
@@ -282,7 +282,7 @@ def lambda_prop(e, mx):
 
 
 @jit(nopython=True)
-def dn_de_gamma_AP(e, mx):
+def dn_de_g_ap(e, mx):
     """FSR spectrum for xbar x -> e+ e- g using the Altarelli-Parisi
     approximation.
 
@@ -302,7 +302,7 @@ def dn_de_gamma_AP(e, mx):
     mu_e = me / Q
     x = 2.*e / Q
 
-    if e > mx:
+    if e >= mx:
         return 0.
     else:
         coeff = 2.*alpha_em / (np.pi*Q)
@@ -315,59 +315,65 @@ def dn_de_gamma_AP(e, mx):
             return 0.
 
 
-def _constrain_ep_spec(dm_flux, bg_flux, excluded_idxs=[], debug_msgs=False):
-    """Determines the significance of the e-+e+ flux from DM annihilation in
-    other bins.
+def mantissa_exp(x):
+    exp = np.floor(np.log10(x))
+    return x/10**exp, exp
 
-    Parameters
-    ----------
-    dm_flux : float -> float
-        A function returning the e-+e+ flux from DM annihilation as a function
-        of the lepton's energy in GeV.
-    bg_flux : float -> float
-        A function giving the background flux.
-    excluded_idxs : list of ints
-        A list specifying indices of bins to ignore. This is useful because Ge
-        et al treat several other bins as also having an excess from DM
-        annihilating, and thus exclude them from the background fit.
 
-    Returns
-    -------
-    n_sigma_max : float
+def sci_fmt(val, fmt=".0f"):
+    m, e = mantissa_exp(val)
+    if e == 0:
+        return (r"${:" + fmt + r"}$").format(m)
+    else:
+        e_str = "{:.0f}".format(e)
+        if m == 1:
+            return r"$10^{" + e_str + "}$"
+        else:
+            m_str = ("{:" + fmt + "}").format(m)
+            return (r"${" + m_str + r"} \times 10^{" + e_str + "}$")
 
-        The statistical significance for the DM e-+e+ flux for the bin with the
-        most significant excess from DM.
+
+def log_levels(data, n=10):
+    data = [d for d in data.flatten() if d != 0 and not np.isnan(d)]
+    return np.logspace(np.log10(np.min(data)), np.log10(np.max(data)), n)
+
+
+def normal_contours(dist, r_s, val, ax, levels=None, fmt=".0f"):
+    """Creates density contour plot with labels.
     """
-    def dm_iflux(e_low, e_high):
-        return quad(lambda e: 2. * dm_flux(e), e_low, e_high, epsabs=0)[0]
+    if levels is None:
+        levels = log_levels(val)
 
-    idxs = list(set(range(len(dampe_bins))) - set(excluded_idxs))
-    n_sigma_max = 0.
+    cs = ax.contour(dist, r_s, val, levels=levels, norm=LogNorm())
+    clabels = {level: (r"$" + ("{:" + fmt + "}").format(level) + r"$") for level in cs.levels}
+    ax.clabel(cs, inline=True, fmt=clabels)
 
-    # Track bin containing largest excess
-    e_low_max, e_high_max = np.nan, np.nan
 
-    for (e_low, e_high), flux, err in reversed(zip(dampe_bins[idxs],
-                                                   dampe_dflux[idxs],
-                                                   dampe_dflux_err[idxs])):
-        if e_low < dampe_excess_bin_high:
-            # Residual flux
-            obs_iflux = (e_high - e_low) * flux
-            bg_iflux = quad(bg_flux, e_low, e_high, epsabs=0.)[0]
-            residual_iflux = obs_iflux - bg_iflux
+def sci_contours(dist, r_s, val, ax, levels=None, fmt=".0f"):
+    """Creates density contour plot with labels using scientific notation.
+    """
+    if levels is None:
+        levels = log_levels(val)
 
-            # Error on integrated flux
-            obs_iflux_err = (e_high - e_low) * err
+    cs = ax.contour(dist, r_s, val, levels=levels, norm=LogNorm())
+    clabels = {level: sci_fmt(level, fmt) for level in cs.levels}
+    ax.clabel(cs, inline=True, fmt=clabels)
 
-            # Compare with flux from DM annihilations in the bin
-            n_sigma_bin = (dm_iflux(e_low, e_high) - residual_iflux) / \
-                obs_iflux_err
 
-            if n_sigma_bin > n_sigma_max:
-                n_sigma_max = n_sigma_bin
-                e_low_max, e_high_max = e_low, e_high
+def log_contours(dist, r_s, val, ax, levels=None):
+    """Creates density contour plot with contour labels at powers of 10.
+    """
+    if levels is None:
+        levels = log_levels(val)
 
-    if debug_msgs:
-        print("Bin with largest excess: ", e_low_max, e_high_max)
+    cs = ax.contour(dist, r_s, val, levels=levels, norm=LogNorm())
+    clabels = {l: (r"$10^{%i}$" % np.log10(l)) for l in cs.levels}
+    ax.clabel(cs, inline=True, fmt=clabels)
 
-    return n_sigma_max
+
+    cs = ax.contour(dist_pr, r_s_pr, val, levels=levels, norm=LogNorm())
+    clabels = {pr: (r"$10^{%i}$" % np.log10(pr)) for pr in cs.levels}
+    ax.clabel(cs, inline=True, fmt=clabels)
+
+
+colors = [c["color"] for c in plt.rcParams['axes.prop_cycle']]

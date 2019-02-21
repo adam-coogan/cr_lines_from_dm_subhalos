@@ -133,7 +133,7 @@ def K_full(r, d, r_p, r_tr, gamma):
     return K(r, 0., d, r_p, r_tr, gamma) - K(r, np.pi, d, r_p, r_tr, gamma)
 
 @cfunc(float64(intc, CPointer(float64)))
-def dphi2_de_dr_cf(n, xx):
+def dphi_e_dr_cf(n, xx):
     r = xx[0]
     e = xx[1]
     d = xx[2]
@@ -161,7 +161,7 @@ def dphi2_de_dr_cf(n, xx):
 
         return fact_const * fact_e * K_term * (r_term * kpc_to_cm**3)
 
-dphi2_de_dr = LowLevelCallable(dphi2_de_dr_cf.ctypes)
+dphi_e_dr = LowLevelCallable(dphi_e_dr_cf.ctypes)
 
 @cfunc(float64(intc, CPointer(float64)))
 def dJ_dr_cf(n, xx):
@@ -194,9 +194,9 @@ def J_factor(dist, r_p, r_tr, gamma, th_max):
 
     return np.vectorize(_J_factor)(dist, r_p, r_tr, gamma)
 
-def dphi_de_g(e, dist, r_p, r_tr, gamma, th_max, mx=dampe_excess_bin_high,
+def phi_g(e, dist, r_p, r_tr, gamma, th_max, mx=dampe_excess_bin_high,
               sv=3e-26, fx=1.):
-    def _dphi_de_g(e, dist, r_p, r_tr, gamma):
+    def _phi_g(e, dist, r_p, r_tr, gamma):
         if e >= mx:
             return 0.
         else:
@@ -206,4 +206,4 @@ def dphi_de_g(e, dist, r_p, r_tr, gamma, th_max, mx=dampe_excess_bin_high,
                        dn_de_gamma_AP(e, mx))
             return ret_val
 
-    return np.vectorize(_dphi_de_g)(e, dist, r_p, r_tr, gamma)
+    return np.vectorize(_phi_g)(e, dist, r_p, r_tr, gamma)
