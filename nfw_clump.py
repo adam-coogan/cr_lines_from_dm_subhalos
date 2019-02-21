@@ -5,9 +5,12 @@ from numba.extending import get_cython_function_address
 from numba import cfunc, jit
 from numba.types import float64, CPointer, intc
 from scipy import LowLevelCallable
+from scipy.integrate import quad
+from scipy.optimize import brentq
 
 from dm_params import mx, fx, sv
 from utilities import e0, b0, D0, delta, kpc_to_cm, speed_of_light, D
+from utilities import rho_critical, GeV_to_m_sun
 
 # Obtained by finding the mangled function name in:
 # >>> from scipy.special.cython_special import __pyx_capi__
@@ -29,11 +32,9 @@ def mass(rs, rhos, gamma):
     # be fine for this project.
     try:
         def _r_vir_integrand(r):
-            return (rho(r, rs, rhos, gamma) -
-                    200. * rho_critical)
+            return (rho(r, rs, rhos, gamma) - 200. * rho_critical)
 
-        r_vir = brentq(_r_vir_integrand, 0.01 * rs, 100. * rs,
-                       xtol=1e-200)
+        r_vir = brentq(_r_vir_integrand, 0.01 * rs, 100. * rs, xtol=1e-200)
     except RuntimeError:
         r_vir = np.nan
 
@@ -43,8 +44,7 @@ def mass(rs, rhos, gamma):
     def _mass_integrand(r):
         return r**2 * rho(r, rs, rhos, gamma)
 
-    return factor * quad(_mass_integrand, 0, r_vir, epsabs=0,
-                         epsrel=1e-5)[0]
+    return factor * quad(_mass_integrand, 0, r_vir, epsabs=0, epsrel=1e-5)[0]
 
 
 @np.vectorize
@@ -70,7 +70,7 @@ def K(r, th, d, rs, rhos, gamma):
                      (3*np.log(d_cl_2) -
                       6*np.log(rs + d_cl) +
                       (rs*(11*rs**2 + 6*d_cl_2 +
-                           15*rs*np.sqrt(d**2 + r**2 - 2*d*r*cth))) /
+                           15*rs*d_cl)) /
                       (rs + d_cl)**3)) / (6.*d*r)
         else:
             return (rhos**2*rs**2*d_cl_2**(1 - gamma) *
