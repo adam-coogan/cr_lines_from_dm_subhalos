@@ -324,15 +324,17 @@ def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3., bg_model="d
     TODO: this is a mess. Also, should find a way to use cfunc to speed up the
     DM flux integrals.
     """
-    # Get index of bin containing the DM mass
-    mx_idx = np.digitize(mx, np.unique(bins_dampe.flatten()), right=True)
-
+    # Get index of bin containing excess
+    excess_bin_idx = np.where([e_low_excess, e_high_excess] == bins_dampe)[0][0]
+    # Ignore all bins above this -- since m_DM = e_high_excess, the flux is
+    # zero in all bins above this, and known in this bin.
+    idxs = idxs - set(range(excess_bin_idx, bins_dampe.shape[0]))
     # Reverse the list since constraint is likely to be set by bin closest to
     # the excess.
     idxs = set(range(len(bins_dampe))) - set(excluded_idxs)
-    idxs = idxs - set(range(mx_idx, bins_dampe.shape[0]))
     idxs = sorted(list(idxs))
     idxs.reverse()
+
     # Select the bins that were not excluded
     bins = bins_dampe[idxs]
     phis = phis_dampe[idxs]
