@@ -129,6 +129,7 @@ def line_width_constraint(dist, lum, n_sigma=3., bg_model="dampe", excluded_idxs
     """Returns significance of largest excess in a DAMPE bin aside from the one
     with the true excess. Assumes the clump can be treated as a point source.
     """
+    idxs = set(range(len(bins_dampe))) - set(excluded_idxs)
     # Get index of bin containing excess
     excess_bin_idx = np.where([e_low_excess, e_high_excess] == bins_dampe)[0][0]
     # Ignore all bins above this -- since m_DM = e_high_excess, the flux is
@@ -136,7 +137,6 @@ def line_width_constraint(dist, lum, n_sigma=3., bg_model="dampe", excluded_idxs
     idxs = idxs - set(range(excess_bin_idx, bins_dampe.shape[0]))
     # Reverse the list since constraint is likely to be set by bin closest to
     # the excess.
-    idxs = set(range(len(bins_dampe))) - set(excluded_idxs)
     idxs = sorted(list(idxs))
     idxs.reverse()
 
@@ -159,7 +159,6 @@ def line_width_constraint(dist, lum, n_sigma=3., bg_model="dampe", excluded_idxs
         for (e_low, e_high), Phi_res, Phi_err in zip(bins, Phi_residual, Phi_errs):
             # Factor of 2 is needed because DAMPE measures e+ and e-
             points_e = np.logspace(np.log10(e_low), np.log10(e_high), 10)
-            print(e_low, e_high)
             Phi_clump = 2.*quad(phi_e, e_low, e_high, args=(dist, lum),
                                 points=points_e, epsabs=0, epsrel=1e-5)[0]
             # Determine significance of DM contribution
