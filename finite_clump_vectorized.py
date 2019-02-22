@@ -250,13 +250,6 @@ def rho_s_dampe(dist, r_s, gamma, halo, bg_model="dampe"):
             dphi_e_dr, args=args, ranges=[(dist, dist + 10*r_s), (e_low_excess, e_high_excess)],
             opts=[{"epsabs": 0, "epsrel": 1e-5, "points": points_far},
                   {"epsabs": 0, "epsrel": 1e-5, "points": points_e}])
-        # Try just integrating the spectrum function
-        # args = (dist, r_s, 1., gamma, halo)
-        # Phi_e_near, err_near = quad(phi_e)
-        # print(dist, r_s)
-        # print("Phi_e_near = ", Phi_e_near, "+/-", err_near)
-        # print("Phi_e_far = ", Phi_e_far, "+/-", err_far)
-        # print("")
         # Factor of 2 accounts for DAMPE measuring e+ and e-
         return np.sqrt(Phi_e_residual / (2*Phi_e_near + 2*Phi_e_far))
 
