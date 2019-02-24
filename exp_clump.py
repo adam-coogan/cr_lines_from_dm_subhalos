@@ -101,8 +101,8 @@ dphi_e_dr_llc = LowLevelCallable(dphi_e_dr_cfunc.ctypes)
 
 # J-factor integrand
 def dJ_dr(r, th_max, d, Rb, rho0, gamma):
-    # Solid angle subtended by target
-    dOmega = 2*np.pi*(1. - np.cos(th_max))
+    # Numerically stable expression for solid angle subtended by target
+    dOmega = 4 * np.pi * np.sin(0.5 * th_max)**2
     th_term = K(r, 0, d, Rb, rho0, gamma) - K(r, th_max, d, Rb, rho0, gamma)
     return 2*np.pi/dOmega * th_term
 

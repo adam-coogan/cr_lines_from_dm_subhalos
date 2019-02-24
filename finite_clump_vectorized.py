@@ -291,9 +291,9 @@ def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e, thresh=0.5):
         return (phi_g(e, dist, r_s, rho_s, gamma, halo, 10.**log10_th) / phi_g_tot - thresh)**2
 
     bracket_low = np.log10(1e-6 * fermi_psf)
-    bracket_high = np.log10(0.99 * np.pi)
+    bracket_high = np.log10(np.pi)
     # Hacky but effective way of finding a bracketing interval
-    log10_ths = np.linspace(bracket_low, bracket_high, 20)
+    log10_ths = np.linspace(bracket_low, bracket_high, 50)
     losses = loss(log10_ths)
     bracket_middle = log10_ths[np.nanargmin(losses)]
     # Make sure loss at bracket endpoints is defined
@@ -302,10 +302,15 @@ def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e, thresh=0.5):
 
     # Do not optimize if rho_s is nan
     if not np.isnan(rho_s):
-        log10_th = minimize_scalar(loss,
-                                   bracket=(bracket_low, bracket_middle, bracket_high),
-                                   bounds=(fermi_psf, np.pi)).x
-        return 10.**log10_th
+        try:
+            log10_th = minimize_scalar(
+                loss, bracket=(bracket_low, bracket_middle, bracket_high),
+                bounds=(fermi_psf, np.pi)).x
+            return 10.**log10_th
+        except:
+            print("Not a bracketing interval")
+            print(dist, r_s, loss(bracket_low), loss(bracket_high))
+            return np.nan
     else:
         return np.nan
 
@@ -397,15 +402,3 @@ def anisotropy_differential(e, dist, r_s, rho_s, gamma, halo,
     # dphi_e_dd = (phi_e_d_dd - phi_e_d) / delta_d
     phi_e_tot = phi_e_d + phi_e_bg
     return 3 * D(e) / speed_of_light * dphi_e_dd / kpc_to_cm / phi_e_tot
-
-
-#def anisotropy_constraint(dist, r_s, rho_s, gamma, halo, bg_flux=bg_dampe,
-#                          mx=e_high_excess, sv=3e-26, fx=1.,
-#                          debug=False):
-#    """Computes the ratio of the clump e-+e+ anisotropy to the Fermi anisotropy
-#    bound in its highest-energy bin.
-#    """
-#    return (integrated_aniso(dist, r_s, rho_s, gamma, halo,
-#                             e_low_aniso_fermi[-1], e_high_aniso_fermi[-1],
-#                             bg_flux, mx, sv, fx, debug) /
-#            aniso_fermi[-1])
