@@ -320,16 +320,16 @@ def mantissa_exp(x):
     return x/10**exp, exp
 
 
-def sci_fmt(val, fmt=".0f"):
+def sci_fmt(val):
     m, e = mantissa_exp(val)
     if e == 0:
-        return (r"${:" + fmt + r"}$").format(m)
+        return "{:g}".format(m)
     else:
-        e_str = "{:.0f}".format(e)
+        e_str = "{:g}".format(e)
         if m == 1:
             return r"$10^{" + e_str + "}$"
         else:
-            m_str = ("{:" + fmt + "}").format(m)
+            m_str = "{:g}".format(m)
             return (r"${" + m_str + r"} \times 10^{" + e_str + "}$")
 
 
@@ -338,42 +338,38 @@ def log_levels(data, n=10):
     return np.logspace(np.log10(np.min(data)), np.log10(np.max(data)), n)
 
 
-def normal_contours(dist, r_s, val, ax, levels=None, fmt=".0f"):
+def normal_contours(dist, r_s, val, ax, levels=None, fmt=".0f", norm=LogNorm()):
     """Creates density contour plot with labels.
     """
     if levels is None:
         levels = log_levels(val)
 
-    cs = ax.contour(dist, r_s, val, levels=levels, norm=LogNorm())
-    clabels = {level: (r"$" + ("{:" + fmt + "}").format(level) + r"$") for level in cs.levels}
+    cs = ax.contour(dist, r_s, val, levels=levels, norm=norm)
+    clabels = {level: r"$" + "{:g}".format(level) + r"$" for level in cs.levels}
     ax.clabel(cs, inline=True, fmt=clabels)
 
 
-def sci_contours(dist, r_s, val, ax, levels=None, fmt=".0f"):
+def sci_contours(dist, r_s, val, ax, levels=None):
     """Creates density contour plot with labels using scientific notation.
     """
     if levels is None:
         levels = log_levels(val)
 
     cs = ax.contour(dist, r_s, val, levels=levels, norm=LogNorm())
-    clabels = {level: sci_fmt(level, fmt) for level in cs.levels}
+    clabels = {level: sci_fmt(level) for level in cs.levels}
     ax.clabel(cs, inline=True, fmt=clabels)
 
 
-def log_contours(dist, r_s, val, ax, levels=None):
-    """Creates density contour plot with contour labels at powers of 10.
-    """
-    if levels is None:
-        levels = log_levels(val)
-
-    cs = ax.contour(dist, r_s, val, levels=levels, norm=LogNorm())
-    clabels = {l: (r"$10^{%i}$" % np.log10(l)) for l in cs.levels}
-    ax.clabel(cs, inline=True, fmt=clabels)
-
-
-    cs = ax.contour(dist_pr, r_s_pr, val, levels=levels, norm=LogNorm())
-    clabels = {pr: (r"$10^{%i}$" % np.log10(pr)) for pr in cs.levels}
-    ax.clabel(cs, inline=True, fmt=clabels)
+# def log_contours(dist, r_s, val, ax, levels=None):
+#     """Creates density contour plot with contour labels at powers of 10.
+#     """
+#     if levels is None:
+#         levels = log_levels(val)
+#
+#     cs = ax.contour(dist, r_s, val, levels=levels, norm=LogNorm())
+#     e_str
+#     clabels = {l: (r"$10^{%i}$" % np.log10(l)) for l in cs.levels}
+#     ax.clabel(cs, inline=True, fmt=clabels)
 
 
 colors = [c["color"] for c in plt.rcParams['axes.prop_cycle']]
