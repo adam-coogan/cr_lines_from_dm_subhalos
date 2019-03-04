@@ -20,7 +20,7 @@ def phi_e_bg_dampe(e):
         Fluxe in (cm^2 s sr GeV)^-1
     """
     phi0 = 1.62e-4 * 1e-4  # (cm^2 s sr GeV)^-1
-    eb = 914  # GeV
+    eb = 914.  # GeV
     gamma1 = 3.09
     gamma2 = 3.92
     delta = 0.1

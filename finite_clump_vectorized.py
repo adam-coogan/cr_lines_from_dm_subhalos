@@ -387,6 +387,7 @@ def fermi_point_src_contraint(dist, r_s, gamma, halo, e_star=230.):
     return np.sqrt(phi_g_sens / phi_g_clump)
 
 
+@np.vectorize
 def anisotropy_differential(e, dist, r_s, rho_s, gamma, halo,
                             delta_d_rel=0.001, bg_model="dampe"):
     # Compute derivative with respect to distance numerically
@@ -394,11 +395,21 @@ def anisotropy_differential(e, dist, r_s, rho_s, gamma, halo,
         phi_e_bg = phi_e_bg_dampe(e)
     elif bg_model == "alt":
         phi_e_bg = phi_e_bg_alt(e)
-    phi_e_d = phi_e(e, dist, r_s, rho_s, gamma, halo, epsrel=1e-3*delta_d_rel)
+    phi_e_d = 2 * phi_e(e, dist, r_s, rho_s, gamma, halo, epsrel=1e-3*delta_d_rel)
+
     delta_d = delta_d_rel * dist
-    phi_e_d_dd = phi_e(e, dist + delta_d, r_s, rho_s, gamma, halo, epsrel=1e-3*delta_d_rel)
+    phi_e_d_dd = 2 * phi_e(e, dist + delta_d, r_s, rho_s, gamma, halo, epsrel=1e-3*delta_d_rel)
+
     dphi_e_dd = np.abs((phi_e_d_dd - phi_e_d) / delta_d)
-    # print("dphi, dd = ", phi_e_d_dd - phi_e_d, delta_d)
-    # dphi_e_dd = (phi_e_d_dd - phi_e_d) / delta_d
     phi_e_tot = phi_e_d + phi_e_bg
+
     return 3 * D(e) / speed_of_light * dphi_e_dd / kpc_to_cm / phi_e_tot
+
+
+@np.vectorize
+def anisotropy_integrated(e_low, e_high, dist, r_s, rho_s, gamma, halo,
+                          delta_d_rel=0.001, bg_model="dampe"):
+    points_e = np.clip(mx * (1 - np.logspace(-6, -1, 10)), e_low, e_high)
+    args = (dist, r_s, rho_s, gamma, halo, delta_d_rel, bg_model)
+    return quad(anisotropy_differential, e_low, e_high, points=points_e,
+                args=args, epsabs=0, epsrel=1e-5)[0] / (e_high - e_low)
