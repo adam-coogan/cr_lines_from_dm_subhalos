@@ -7,6 +7,10 @@ from numba.extending import get_cython_function_address
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
 
+"""
+Constants and utility functions.
+"""
+
 # Set up the gamma function. It needs to be defined this way since
 # get_cython_function_address doesn't work with gamma, likely because gamma
 # involves complex numbers.
@@ -154,7 +158,7 @@ fermi_pt_src_sens_0_0 = interp1d(e_g_f_0_0, phi_g_f_0_0, bounds_error=False)
 
 def plot_obs_helper(bin_ls, bin_rs, vals, errs, ax, label=None, color="r",
                     alpha=0.75, lw=0.75):
-    """Plots observations.
+    """Plots observations with errors.
 
     Parameters
     ----------
@@ -358,18 +362,6 @@ def sci_contours(dist, r_s, val, ax, levels=None):
     cs = ax.contour(dist, r_s, val, levels=levels, norm=LogNorm())
     clabels = {level: sci_fmt(level) for level in cs.levels}
     ax.clabel(cs, inline=True, fmt=clabels)
-
-
-# def log_contours(dist, r_s, val, ax, levels=None):
-#     """Creates density contour plot with contour labels at powers of 10.
-#     """
-#     if levels is None:
-#         levels = log_levels(val)
-#
-#     cs = ax.contour(dist, r_s, val, levels=levels, norm=LogNorm())
-#     e_str
-#     clabels = {l: (r"$10^{%i}$" % np.log10(l)) for l in cs.levels}
-#     ax.clabel(cs, inline=True, fmt=clabels)
 
 
 colors = [c["color"] for c in plt.rcParams['axes.prop_cycle']]

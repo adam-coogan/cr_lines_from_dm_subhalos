@@ -35,6 +35,9 @@ from exp_clump import ann_plateau_radius as ann_plateau_radius_exp
 
 @np.vectorize
 def get_points_near_far(dist, r_s):
+    """Used to sample points closer and further than the clump's distance from
+    Earth to make integrations more accurate.
+    """
     n_near_pts = 20
     n_far_pts = 20
     if r_s / dist > 1:
@@ -191,10 +194,6 @@ def J_factor(dist, r_s, rho_s, gamma, halo, th_max):
 def phi_g(e, dist, r_s, rho_s, gamma, halo, th_max):
     """Computes the differential flux phi|_gamma for a DM clump.
 
-    Notes
-    -----
-    Checked numerical stability for NFW
-
     Parameters
     ----------
     e : list of floats
@@ -272,11 +271,6 @@ def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e, thresh=0.5):
     rho_s : float
         Subhalo density normalization (GeV / cm^3).
 
-    Notes
-    -----
-    Throws many ZeroDivisionError exceptions. Lots of numerical issues at small
-    r_s and large dist.
-
     Returns
     -------
     th_ext : float
@@ -318,9 +312,6 @@ def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e, thresh=0.5):
 def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3., bg_model="dampe", excluded_idxs=[]):
     """Returns significance of largest excess in a DAMPE bin aside from the one
     with the true excess.
-
-    TODO: this is a mess. Also, should find a way to use cfunc to speed up the
-    DM flux integrals.
     """
     idxs = set(range(len(bins_dampe))) - set(excluded_idxs)
     # Get index of bin containing excess
@@ -409,6 +400,7 @@ def anisotropy_differential(e, dist, r_s, rho_s, gamma, halo,
 @np.vectorize
 def anisotropy_integrated(e_low, e_high, dist, r_s, rho_s, gamma, halo,
                           delta_d_rel=0.001, bg_model="dampe"):
+    """Bin-averaged anisotropy."""
     points_e = np.clip(mx * (1 - np.logspace(-6, -1, 10)), e_low, e_high)
     args = (dist, r_s, rho_s, gamma, halo, delta_d_rel, bg_model)
     return quad(anisotropy_differential, e_low, e_high, points=points_e,

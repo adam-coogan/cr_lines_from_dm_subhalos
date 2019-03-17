@@ -11,13 +11,22 @@ from utilities import e_low_excess, e_high_excess, D
 from utilities import Phi_excess, bins_dampe, phis_dampe, phi_errs_dampe
 
 
+"""
+Functions for analyzing a point-like clump.
+"""
+
+
 def lum_dampe(dist, bg_model="dampe"):
-    """Returns the luminosity such that xx->e+e- fits the DAMPE excess.
+    """Luminosity required for the clump to fit the DAMPE excess.
+
+    Parameters
+    ----------
+    bg_model : str
+        "dampe" for DAMPE's background model, "alt" for the one from Ge et al.
 
     Returns
     -------
-    L : float
-        Luminosity in s^-1
+    Luminosity in s^-1
     """
     Phi_bg = Phi_e_bg(e_low_excess, e_high_excess, bg_model)
 
@@ -35,7 +44,7 @@ def lum_dampe(dist, bg_model="dampe"):
 
 @np.vectorize
 def phi_e(e, dist, lum):
-    """Flux of e- from a point-like DM clump after propagation.
+    """Flux of e- at Earth.
 
     Parameters
     ----------
@@ -48,8 +57,7 @@ def phi_e(e, dist, lum):
 
     Returns
     -------
-    phi_e : numpy array
-        e- flux in (GeV cm^2 s sr)^-1
+    e- flux in (GeV cm^2 s sr)^-1.
     """
     d_cm = kpc_to_cm * dist
 
@@ -60,14 +68,9 @@ def phi_e(e, dist, lum):
         return 0
 
 
-#@jit(nopython=True)
 @np.vectorize
 def phi_g(e, dist, lum):
     """Photon flux from FSR for DM annihilating into e+ e-
-
-    To-do
-    -----
-    Make function to get integrated flux
 
     Parameters
     ----------
@@ -80,15 +83,14 @@ def phi_g(e, dist, lum):
 
     Returns
     -------
-    phi_g : numpy array
-        Photon flux in (GeV cm^2 s sr)^-1
+    Photon flux in (GeV cm^2 s sr)^-1.
     """
     d_cm = kpc_to_cm * dist
     return lum/(4.*np.pi*d_cm**2) * dn_de_g_ap(e, mx)
 
 
 def phi_e_dampe(e, dist):
-    """e+/e- flux, with DM mass and clump luminosity set to fit DAMPE excess.
+    """ee- flux, with clump luminosity set to fit DAMPE excess.
 
     Parameters
     ----------
@@ -99,15 +101,14 @@ def phi_e_dampe(e, dist):
 
     Returns
     -------
-    dphi_de_e : numpy array
-        e+/e- flux in (GeV cm^2 s sr)^-1
+    e- flux in (GeV cm^2 s sr)^-1.
     """
     lum = lum_dampe(dist)
     return phi_e(e, dist, lum)
 
 
 def phi_g_dampe(e, dist):
-    """Photon flux, with DM mass and clump luminosity set to fit DAMPE excess.
+    """Photon flux from FSR, with clump luminosity set to fit DAMPE excess.
 
     Parameters
     ----------
@@ -118,16 +119,33 @@ def phi_g_dampe(e, dist):
 
     Returns
     -------
-    phi_g : numpy array
-        Photon flux in (GeV cm^2 s sr)^-1
+    Photon flux in (GeV cm^2 s sr)^-1
     """
     lum = lum_dampe(dist)
     return phi_g(e, dist, lum)
 
 
 def line_width_constraint(dist, lum, n_sigma=3., bg_model="dampe", excluded_idxs=[]):
-    """Returns significance of largest excess in a DAMPE bin aside from the one
-    with the true excess. Assumes the clump can be treated as a point source.
+    """Determines the significance of the largest e-+e+ excess aside from the
+    one in the ~1.5 TeV bin.
+
+    Parameters
+    ----------
+    dist : float
+        Distance to clump (kpc).
+    lum : float
+        Clump luminosity (s^-1).
+    n_sigma : float
+        Threshold defining when an excess is significant.
+    bg_model : str
+        "dampe" or "alt"
+    excluded_idxs : list(int)
+        A list of indices of bins in which to ignore excesses.
+
+    Returns
+    -------
+    Significance (z-score) of largest excess, or n_sigma if the largest excess
+    exceeds n_sigma.
     """
     idxs = set(range(len(bins_dampe))) - set(excluded_idxs)
     # Get index of bin containing excess
@@ -174,6 +192,21 @@ def line_width_constraint(dist, lum, n_sigma=3., bg_model="dampe", excluded_idxs
 
 @np.vectorize
 def anisotropy_differential(e, dist, lum):
+    """Computes the differential anisotropy, delta.
+
+    Parameters
+    ----------
+    e : numpy array
+        e+/- energy (GeV).
+    dist : float
+        Distance to clump (kpc).
+    lum : float
+        Clump luminosity (s^-1).
+
+    Returns
+    -------
+    delta (adimensional).
+    """
     if e < mx:
         phi_ep_clump = 2*phi_e(e, dist, lum)
         phi_ep_tot = phi_ep_clump + phi_e_bg_dampe(e)
@@ -185,6 +218,23 @@ def anisotropy_differential(e, dist, lum):
 
 @np.vectorize
 def anisotropy_integrated(e_low, e_high, dist, lum):
+    """Computes the bin-averaged anisotropy.
+
+    Parameters
+    ----------
+    e_low : numpy array
+        Lower bin edge.
+    e_high : numpy array
+        Upper bin edge.
+    dist : float
+        Distance to clump (kpc).
+    lum : float
+        Clump luminosity (s^-1).
+
+    Returns
+    -------
+    int_{e_low}^{e_high} de delta(e) / (e_high - e_low) (adimensional).
+    """
     points_e = mx * (1 - np.logspace(-6, -1, 10))
     return quad(anisotropy_differential, e_low, e_high, args=(dist, lum),
                 points=points_e, epsabs=1e-99)[0] / (e_high - e_low)

@@ -5,6 +5,10 @@ from scipy import LowLevelCallable
 from scipy.integrate import quad
 
 
+"""
+e+/- and gamma-ray background spectra.
+"""
+
 
 def phi_e_bg_dampe(e):
     """Official DAMPE background model for the e+ e- flux
