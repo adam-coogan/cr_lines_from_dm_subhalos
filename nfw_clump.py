@@ -23,7 +23,7 @@ hyp2f1_cs = functype_hyp(addr_hyp)
 
 @np.vectorize
 def rho(dist, rs, rhos, gamma):
-    return rhos * (rs / dist)**gamma * (1. + dist / rs)**(gamma - 3.)
+    return rhos * (rs / np.abs(dist))**gamma * (1. + np.abs(dist) / rs)**(gamma - 3.)
 
 
 @np.vectorize
@@ -49,7 +49,7 @@ def mass(rs, rhos, gamma):
 
 @np.vectorize
 def luminosity(rs, rhos, gamma):
-    factor = sv / (2*fx*mx**2)
+    factor = sv / (2 * fx * mx**2)
     rs_cm = kpc_to_cm * rs
     L_clump = (4*np.pi*rhos**2*rs_cm**3) / (30 - 47*gamma + 24*gamma**2 - 4*gamma**3)
     return factor * L_clump

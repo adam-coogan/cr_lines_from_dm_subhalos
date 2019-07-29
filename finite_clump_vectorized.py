@@ -329,6 +329,55 @@ def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3., bg_model="d
     phis = phis_dampe[idxs]
     phi_errs = phi_errs_dampe[idxs]
 
+    # Compute integrated flux in each bin
+    Phi_residual = []
+    Phi_errs = []
+    for (e_low, e_high), phi, err in zip(bins, phis, phi_errs):
+        Phi_dampe = (e_high - e_low) * phi
+        Phi_bg = Phi_e_bg(e_low, e_high, bg_model)
+        Phi_residual.append(Phi_dampe - Phi_bg)
+        Phi_errs.append((e_high - e_low) * err)
+
+    @np.vectorize
+    def _line_width_constraint(dist, r_s, rho_s, gamma):
+        args = (dist, r_s, rho_s, gamma, halo)
+        n_sigma_max = 0.
+        for (e_low, e_high), Phi_res, Phi_err in zip(bins, Phi_residual, Phi_errs):
+            # Factor of 2 is needed because DAMPE measures e+ and e-
+            # The integrand is not sharply peaked outside the bin with the
+            # excess, so we don't need to set `points`.
+            Phi_clump = 2 * quad(phi_e, e_low, e_high, args, epsabs=0, epsrel=1e-5)[0]
+            # Determine significance of DM contribution
+            n_sigma_bin = (Phi_clump - Phi_res) / Phi_err
+            n_sigma_max = max(n_sigma_bin, n_sigma_max)
+            if n_sigma_max >= n_sigma:  # stop if threshold was exceeded
+                return n_sigma_max
+        return n_sigma_max
+
+    return _line_width_constraint(dist, r_s, rho_s, gamma)
+
+
+def line_width_constraint_chi2(dist, r_s, rho_s, gamma, halo, bg_model="dampe", excluded_idxs=[]):
+    """Returns significance of largest excess in a DAMPE bin aside from the one
+    with the true excess.
+    """
+    idxs = set(range(len(bins_dampe))) - set(excluded_idxs)
+    # Get index of bin containing excess
+    excess_bin_idx = np.where([e_low_excess, e_high_excess] == bins_dampe)[0][0]
+    # Ignore all bins above this -- since m_DM = e_high_excess, the flux is
+    # zero in all bins above this, and known in this bin.
+    idxs = idxs - set(range(excess_bin_idx, bins_dampe.shape[0]))
+    # Reverse the list since constraint is likely to be set by bin closest to
+    # the excess.
+    idxs = sorted(list(idxs))
+    idxs.reverse()
+
+    # Select the bins that were not excluded
+    bins = bins_dampe[idxs]
+    phis = phis_dampe[idxs]
+    phi_errs = phi_errs_dampe[idxs]
+
+    # Compute integrated flux in each bin
     Phi_residual = []
     Phi_errs = []
     for (e_low, e_high), phi, err in zip(bins, phis, phi_errs):

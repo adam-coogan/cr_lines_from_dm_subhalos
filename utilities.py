@@ -26,9 +26,9 @@ gammaln_cs = functype_gln(addr_gln)
 # Can fix by finding the mangled function name in:
 # >>> from scipy.special.cython_special import __pyx_capi__
 # >>> __pyx_capi__
-#addr_expi = get_cython_function_address("scipy.special.cython_special", "expi")
-#functype_expi = ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double)
-#expi_cs = functype_expi(addr_expi)
+# addr_expi = get_cython_function_address("scipy.special.cython_special", "expi")
+# functype_expi = ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double)
+# expi_cs = functype_expi(addr_expi)
 
 # Set up upper incomplete gamma function. scipy's version is normalized by
 # 1/Gamma.
@@ -37,7 +37,7 @@ functype_gi = ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double, ctypes.c_double
 gammaincc_cs = functype_gi(addr_ggi)
 
 
-@vectorize('float64(float64, float64)', nopython=True)
+@vectorize("float64(float64, float64)", nopython=True)
 def gamma_inc_upper(a, z):
     """Incomplete upper gamma function as defined in Mathematica and on
     wikipedia.
@@ -65,26 +65,26 @@ def gamma_inc_upper(a, z):
         a_c = int(np.ceil(np.abs(a)))
         a_f = int(np.floor(np.abs(a)))
 
-        exp_terms = 0.
-        denom = 1.
+        exp_terms = 0.0
+        denom = 1.0
         for m in range(a_f, -1, -1):
             denom *= a + m
-            exp_terms = (exp_terms + z**a) / (a + m)
+            exp_terms = (exp_terms + z ** a) / (a + m)
         exp_terms *= np.exp(-z)
 
         gamma_val = np.exp(gammaln_cs(a + a_c)) * gammasgn_cs(a + a_c)
         return gamma_val * gammaincc_cs(a + a_c, z) / denom - exp_terms
 
 
-@vectorize('float64(float64)', nopython=True)
+@vectorize("float64(float64)", nopython=True)
 def lambert_w_series(x):
-    return x - x**2 + 3./2.* x**3 - 8./3.*x**4 + 125./24.*x**5
+    return x - x ** 2 + 3.0 / 2.0 * x ** 3 - 8.0 / 3.0 * x ** 4 + 125.0 / 24.0 * x ** 5
 
 
 speed_of_light = 3.0e10  # cm / s
 kpc_to_cm = 3.086e21  # 3.086 x 10^21 cm / kpc
-hbar = 6.582e-16*1/1e9  # GeV s
-Hz_to_GeV2_cm3 = 1 / (hbar**2 * speed_of_light**3)
+hbar = 6.582e-16 * 1 / 1e9  # GeV s
+Hz_to_GeV2_cm3 = 1 / (hbar ** 2 * speed_of_light ** 3)
 GeV_to_m_sun = 8.96515e-58  # m_sun / GeV
 t_universe = 13.772e9 * (365 * 24 * 60 * 60)  # age of universe, s
 
@@ -92,48 +92,55 @@ rho_earth = 0.3  # local DM density, GeV / cm^3
 rho_critical = 5.61e-6  # critical density, GeV / cm^3
 
 b0 = 1.0e-16  # GeV/s
-e0 = 1.  # GeV
+e0 = 1.0  # GeV
 
 D0 = 1.0e28  # cm^2 / s
 delta = 0.7
 
-alpha_em = 1. / 137.
+alpha_em = 1.0 / 137.0
 me = 0.501 * 1e-3  # m_e (GeV)
 
-fermi_psf = 0.15 * np.pi / 180.  # arxiv:0902.1089
-fermi_psf_solid_angle = 2.*np.pi*(1. - np.cos(fermi_psf))
+fermi_psf = 0.15 * np.pi / 180.0  # arxiv:0902.1089
+fermi_psf_solid_angle = 2.0 * np.pi * (1.0 - np.cos(fermi_psf))
 
 # Load AMS positron data
-pos_frac_es, pos_frac = \
-        np.loadtxt("data/fluxes/positron_fraction_ams.dat").T[[0, 3]]
+pos_frac_es, pos_frac = np.loadtxt("data/fluxes/positron_fraction_ams.dat").T[[0, 3]]
 
 # Load AMS fluxes and bins
-ams_es, ams_bin_low, ams_bin_high, ams_dflux, ams_stat, ams_syst = \
-        np.loadtxt("data/fluxes/electron_positron_flux_ams.dat").T
+ams_es, ams_bin_low, ams_bin_high, ams_dflux, ams_stat, ams_syst = np.loadtxt(
+    "data/fluxes/electron_positron_flux_ams.dat"
+).T
 ams_dflux = ams_dflux * 1e-4
-ams_dflux_err = np.sqrt(ams_stat**2 + ams_syst**2) * 1e-4
+ams_dflux_err = np.sqrt(ams_stat ** 2 + ams_syst ** 2) * 1e-4
 
 # Load DAMPE fluxes and bins
-e_lows_dampe, e_highs_dampe, es_dampe, phis_dampe, stats_dampe, systs_dampe =\
-        np.loadtxt("data/fluxes/electron_positron_flux_dampe.dat").T
+e_lows_dampe, e_highs_dampe, es_dampe, phis_dampe, stats_dampe, systs_dampe = np.loadtxt(
+    "data/fluxes/electron_positron_flux_dampe.dat"
+).T
 phis_dampe = phis_dampe * 1e-4
 bins_dampe = np.transpose([e_lows_dampe, e_highs_dampe])
-phi_errs_dampe = np.sqrt(stats_dampe**2 + systs_dampe**2) * 1e-4
+phi_errs_dampe = np.sqrt(stats_dampe ** 2 + systs_dampe ** 2) * 1e-4
 
 # Anisotropy bound on e- only from AMS (arxiv:1612.08957)
-e_low_aniso_ams, e_high_aniso_ams, aniso_ams = 16., 350., 0.006
+e_low_aniso_ams, e_high_aniso_ams, aniso_ams = 16.0, 350.0, 0.006
 # Anisotropy bound on e-+e+ from Fermi (arxiv:1703.01073)
-e_low_aniso_fermi, e_high_aniso_fermi, aniso_fermi = np.loadtxt("data/fermi_epm_aniso.csv").T
+e_low_aniso_fermi, e_high_aniso_fermi, aniso_fermi = np.loadtxt(
+    "data/fermi_epm_aniso.csv"
+).T
 
 # Lower and upper limits on bin with the excess
 e_low_excess, e_high_excess = 1318.3, 1513.6
 # Integrated flux in "excess" cm^-2 s^-1 sr^-1
-Phi_excess = (e_high_excess - e_low_excess) * phis_dampe[np.abs(es_dampe-1400.).argmin()]
+Phi_excess = (e_high_excess - e_low_excess) * phis_dampe[
+    np.abs(es_dampe - 1400.0).argmin()
+]
+
 
 def max_dm_density(mx, sv):
     """Maximum possible DM density, GeV / cm^3.
     """
     return mx / sv / t_universe
+
 
 # Max DM density with fiducial parameters
 rho_max = max_dm_density(mx=e_high_excess, sv=3e-26)
@@ -141,23 +148,31 @@ rho_max = max_dm_density(mx=e_high_excess, sv=3e-26)
 # Fermi broadband flux sensitivity: max flux of a power law source at the
 # detection threshold for any power law. From here.
 # (b, l) = (120, 45)
-e_g_f_120_45, phi_g_f_120_45 = np.loadtxt("data/fermi/broadband_flux_"
-                                          "sensitivity_p8r2_source_v6_all"
-                                          "_10yr_zmax100_n10.0_e1.50_ts25"
-                                          "_120_045.csv").T
-e_g_f_120_45 = e_g_f_120_45 / 1e3 # MeV -> GeV
-phi_g_f_120_45 = 624.15091*phi_g_f_120_45 / e_g_f_120_45**2  # erg -> GeV, divide by E^2
+e_g_f_120_45, phi_g_f_120_45 = np.loadtxt(
+    "data/fermi/broadband_flux_"
+    "sensitivity_p8r2_source_v6_all"
+    "_10yr_zmax100_n10.0_e1.50_ts25"
+    "_120_045.csv"
+).T
+e_g_f_120_45 = e_g_f_120_45 / 1e3  # MeV -> GeV
+phi_g_f_120_45 = (
+    624.15091 * phi_g_f_120_45 / e_g_f_120_45 ** 2
+)  # erg -> GeV, divide by E^2
 fermi_pt_src_sens_120_45 = interp1d(e_g_f_120_45, phi_g_f_120_45, bounds_error=False)
 # (b, l) = (0, 0)
-e_g_f_0_0, phi_g_f_0_0 = np.loadtxt("data/fermi/broadband_flux_sensitivity"
-                                        "_p8r2_source_v6_all_10yr_zmax100_n10."
-                                        "0_e1.50_ts25_000_000.txt").T
-e_g_f_0_0 = e_g_f_0_0 / 1e3 # MeV -> GeV
-phi_g_f_0_0 = 624.15091*phi_g_f_0_0 / e_g_f_0_0**2  # erg -> GeV, divide by E^2
+e_g_f_0_0, phi_g_f_0_0 = np.loadtxt(
+    "data/fermi/broadband_flux_sensitivity"
+    "_p8r2_source_v6_all_10yr_zmax100_n10."
+    "0_e1.50_ts25_000_000.txt"
+).T
+e_g_f_0_0 = e_g_f_0_0 / 1e3  # MeV -> GeV
+phi_g_f_0_0 = 624.15091 * phi_g_f_0_0 / e_g_f_0_0 ** 2  # erg -> GeV, divide by E^2
 fermi_pt_src_sens_0_0 = interp1d(e_g_f_0_0, phi_g_f_0_0, bounds_error=False)
 
-def plot_obs_helper(bin_ls, bin_rs, vals, errs, ax, label=None, color="r",
-                    alpha=0.75, lw=0.75):
+
+def plot_obs_helper(
+    bin_ls, bin_rs, vals, errs, ax, label=None, color="r", alpha=0.75, lw=0.75
+):
     """Plots observations with errors.
 
     Parameters
@@ -171,17 +186,20 @@ def plot_obs_helper(bin_ls, bin_rs, vals, errs, ax, label=None, color="r",
     errs : numpy array
         Bin error bars
     """
-    for i, (bl, br, l, u) in enumerate(zip(bin_ls, bin_rs, vals-errs,
-                                           vals+errs)):
+    for i, (bl, br, v, l, u) in enumerate(zip(bin_ls, bin_rs, vals, vals - errs, vals + errs)):
+        # Plot central value
+        ax.plot([bl, br], [v, v], color=color, lw=1)
+
+        # Plot box with error bars
         if i != len(bin_ls) - 1:
-            ax.fill_between([bl, br], [l, l], [u, u],
-                            color=color, alpha=alpha, lw=lw)
+            ax.fill_between([bl, br], [l, l], [u, u], color=color, alpha=alpha, lw=lw)
         else:
-            ax.fill_between([bl, br], [l, l], [u, u],
-                            color=color, alpha=alpha, lw=lw, label=label)
+            ax.fill_between(
+                [bl, br], [l, l], [u, u], color=color, alpha=alpha, lw=lw, label=label
+            )
 
 
-def plot_obs(power, ax, highlight_excess_bins=True):
+def plot_obs(power, ax, highlight_excess_bins=True, n_sigma=1, alpha=0.3):
     """Plots DAMPE observations.
 
     Parameters
@@ -193,23 +211,36 @@ def plot_obs(power, ax, highlight_excess_bins=True):
     """
     obs_color = "goldenrod"
     excess_color = "steelblue"
-
-    # Observations
-    plot_obs_helper(e_lows_dampe, e_highs_dampe,
-                    es_dampe**power * phis_dampe,
-                    es_dampe**power * phi_errs_dampe,
-                    ax, label="DAMPE", alpha=0.3, lw=0.5, color=obs_color)
+    excess_idx = 29
 
     if highlight_excess_bins:
-        #for excess_idxs, color in zip([range(23, 28), [29]], ['r', 'b']):
-        excess_idxs = [29]
-        plot_obs_helper(e_lows_dampe[excess_idxs],
-                        e_highs_dampe[excess_idxs],
-                        es_dampe[excess_idxs]**power *
-                        phis_dampe[excess_idxs],
-                        es_dampe[excess_idxs]**power *
-                        phi_errs_dampe[excess_idxs],
-                        ax, alpha=0.5, lw=0.5, color=excess_color)
+        bin_idxs = range(0, excess_idx) + range(excess_idx + 1, len(e_lows_dampe))
+
+    # Observations
+    plot_obs_helper(
+        e_lows_dampe[bin_idxs],
+        e_highs_dampe[bin_idxs],
+        es_dampe[bin_idxs] ** power * phis_dampe[bin_idxs],
+        es_dampe[bin_idxs] ** power * phi_errs_dampe[bin_idxs] * n_sigma,
+        ax,
+        label="DAMPE",
+        alpha=alpha,
+        lw=0.5,
+        color=obs_color
+    )
+
+    if highlight_excess_bins:
+        # for excess_idxs, color in zip([range(23, 28), [29]], ['r', 'b']):
+        plot_obs_helper(
+            e_lows_dampe[[excess_idx]],
+            e_highs_dampe[[excess_idx]],
+            es_dampe[[excess_idx]] ** power * phis_dampe[[excess_idx]],
+            es_dampe[[excess_idx]] ** power * phi_errs_dampe[[excess_idx]] * n_sigma,
+            ax,
+            alpha=alpha,
+            lw=0.5,
+            color=excess_color
+        )
 
 
 @jit(nopython=True)
@@ -225,7 +256,7 @@ def b(e):
     -------
         Coefficient in GeV / s
     """
-    return b0 * (e / e0)**2
+    return b0 * (e / e0) ** 2
 
 
 @jit(nopython=True)
@@ -241,14 +272,14 @@ def D(e):
     -------
         Coefficient in cm^2 / s
     """
-    return D0 * (e / e0)**delta
+    return D0 * (e / e0) ** delta
 
 
 @jit(nopython=True)
 def t_diff(e, d):
     """Diffusion timescale (s)
     """
-    return (d*kpc_to_cm)**2 / D(e)
+    return (d * kpc_to_cm) ** 2 / D(e)
 
 
 @jit(nopython=True)
@@ -259,7 +290,7 @@ def t_loss(e):
 
 
 # lambda_prop must be less than this quantity
-lambda_prop_max = D0 * e0 / (b0 * (1. - delta))  # cm^2
+lambda_prop_max = D0 * e0 / (b0 * (1.0 - delta))  # cm^2
 
 
 @jit(nopython=True)
@@ -279,10 +310,13 @@ def lambda_prop(e, mx):
         lambda in cm^2
     """
     if e >= mx:
-        return 0.
+        return 0.0
     else:
-        return D0*((e/e0)**delta*e0**2*mx - e*e0**2*(mx/e0)**delta) / \
-            (b0*e*mx - b0*e*mx*delta)
+        return (
+            D0
+            * ((e / e0) ** delta * e0 ** 2 * mx - e * e0 ** 2 * (mx / e0) ** delta)
+            / (b0 * e * mx - b0 * e * mx * delta)
+        )
 
 
 @jit(nopython=True)
@@ -302,39 +336,39 @@ def dn_de_g_ap(e, mx):
     dnde : float
         Spectrum in GeV^-1.
     """
-    Q = 2.*mx
+    Q = 2.0 * mx
     mu_e = me / Q
-    x = 2.*e / Q
+    x = 2.0 * e / Q
 
     if e >= mx:
-        return 0.
+        return 0.0
     else:
-        coeff = 2.*alpha_em / (np.pi*Q)
-        x_term = (1. + (1. - x)**2) / x * (np.log((1. - x) / mu_e**2) - 1.)
+        coeff = 2.0 * alpha_em / (np.pi * Q)
+        x_term = (1.0 + (1.0 - x) ** 2) / x * (np.log((1.0 - x) / mu_e ** 2) - 1.0)
         dnde = coeff * x_term
 
         if dnde > 0:
             return dnde
         else:
-            return 0.
+            return 0.0
 
 
 def mantissa_exp(x):
     exp = np.floor(np.log10(x))
-    return x/10**exp, exp
+    return x / 10 ** exp, exp
 
 
 def sci_fmt(val):
     m, e = mantissa_exp(val)
-    if e == 0:
-        return "{:g}".format(m)
+    if e < 3 and e > -3:
+        return "{:g}".format(val)
     else:
         e_str = "{:g}".format(e)
         if m == 1:
-            return r"$10^{" + e_str + "}$"
+            return r"10^{" + e_str + "}"
         else:
             m_str = "{:g}".format(m)
-            return (r"${" + m_str + r"} \times 10^{" + e_str + "}$")
+            return r"{" + m_str + r"} \times 10^{" + e_str + "}"
 
 
 def log_levels(data, n=10):
@@ -364,4 +398,4 @@ def sci_contours(dist, r_s, val, ax, levels=None):
     ax.clabel(cs, inline=True, fmt=clabels)
 
 
-colors = [c["color"] for c in plt.rcParams['axes.prop_cycle']]
+colors = [c["color"] for c in plt.rcParams["axes.prop_cycle"]]

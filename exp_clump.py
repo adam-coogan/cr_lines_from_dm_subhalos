@@ -13,10 +13,10 @@ from utilities import rho_max, lambert_w_series, gamma_inc_upper
 @np.vectorize
 def rho(dist, Rb, rho0, gamma):
     r_p = ann_plateau_radius(Rb, rho0, gamma)
-    if dist < r_p:
+    if np.abs(dist) < r_p:
         return rho_max
     else:
-        return rho0 * (Rb / dist)**gamma * np.exp(-dist / Rb)
+        return rho0 * (Rb / np.abs(dist))**gamma * np.exp(-np.abs(dist) / Rb)
 
 
 @np.vectorize
