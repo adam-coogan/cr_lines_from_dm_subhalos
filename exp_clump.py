@@ -5,10 +5,11 @@ from numba.types import float64, CPointer, intc
 from scipy import LowLevelCallable
 from scipy.special import gamma as Gamma
 
-from dm_params import mx, fx, sv
+from dm_params import fx, sv
 from utilities import e0, b0, D0, delta, kpc_to_cm, speed_of_light, D
 from utilities import GeV_to_m_sun
 from utilities import rho_max, lambert_w_series, gamma_inc_upper
+from utilities import e_high_excess
 
 @np.vectorize
 def rho(dist, Rb, rho0, gamma):
@@ -25,7 +26,7 @@ def mass(Rb, rho0, gamma):
 
 
 @np.vectorize
-def luminosity(Rb, rho0, gamma):
+def luminosity(Rb, rho0, gamma, mx=e_high_excess):
     factor = sv / (2*fx*mx**2)
     # No annihilation plateau
     Rb_cm = kpc_to_cm * Rb

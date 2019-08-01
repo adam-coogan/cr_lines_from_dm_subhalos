@@ -8,7 +8,7 @@ from scipy.special import gamma as Gamma
 from scipy.special import beta
 from scipy.special import betainc
 
-from dm_params import mx, fx, sv
+from dm_params import fx, sv
 from background_models import Phi_e_bg, phi_e_bg_dampe, phi_e_bg_alt
 from utilities import e_low_aniso_fermi, e_high_aniso_fermi, aniso_fermi
 from utilities import kpc_to_cm, rho_critical, GeV_to_m_sun, fermi_psf
@@ -96,13 +96,13 @@ def mass(r_s, rho_s, gamma, halo):
         return mass_exp(r_s, rho_s, gamma)
 
 
-def luminosity(r_s, rho_s, gamma, halo):
+def luminosity(r_s, rho_s, gamma, halo, mx=e_high_excess):
     """Computes the halo luminosity (Hz).
     """
     if halo == "nfw":
-        return luminosity_nfw(r_s, rho_s, gamma)
+        return luminosity_nfw(r_s, rho_s, gamma, mx)
     elif halo == "exp":
-        return luminosity_exp(r_s, rho_s, gamma)
+        return luminosity_exp(r_s, rho_s, gamma, mx)
 
 
 def lum_to_rho_norm(r_s, lum, gamma, halo):
@@ -116,7 +116,7 @@ def lum_to_rho_norm(r_s, lum, gamma, halo):
     return np.sqrt(lum / luminosity(r_s, 1., gamma, halo))
 
 
-def phi_e(e, dist, r_s, rho_s, gamma, halo, epsrel=1e-5, limit=50):
+def phi_e(e, dist, r_s, rho_s, gamma, halo, mx=e_high_excess, epsrel=1e-5, limit=50):
     """Computes the differential flux phi|_{e-} for a DM clump.
 
     Parameters
@@ -191,7 +191,7 @@ def J_factor(dist, r_s, rho_s, gamma, halo, th_max):
 
 
 @np.vectorize
-def phi_g(e, dist, r_s, rho_s, gamma, halo, th_max):
+def phi_g(e, dist, r_s, rho_s, gamma, halo, th_max, mx=e_high_excess):
     """Computes the differential flux phi|_gamma for a DM clump.
 
     Parameters
@@ -217,7 +217,7 @@ def phi_g(e, dist, r_s, rho_s, gamma, halo, th_max):
     return dOmega/(4*np.pi) * J * sv / (2.*fx*mx**2) * dn_de_g
 
 
-def rho_s_dampe(dist, r_s, gamma, halo, bg_model="dampe"):
+def rho_s_dampe(dist, r_s, gamma, halo, mx=e_high_excess, bg_model="dampe"):
     """Get density normalization giving best fit to excess.
 
     Returns
@@ -309,7 +309,8 @@ def gamma_ray_extent(dist, r_s, rho_s, gamma, halo, e, thresh=0.5):
         return np.nan
 
 
-def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3., bg_model="dampe", excluded_idxs=[]):
+def line_width_constraint(dist, r_s, rho_s, gamma, halo, mx=e_high_excess,
+                          n_sigma=3., bg_model="dampe", excluded_idxs=[]):
     """Returns significance of largest excess in a DAMPE bin aside from the one
     with the true excess.
     """
@@ -340,7 +341,7 @@ def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3., bg_model="d
 
     @np.vectorize
     def _line_width_constraint(dist, r_s, rho_s, gamma):
-        args = (dist, r_s, rho_s, gamma, halo)
+        args = (dist, r_s, rho_s, gamma, halo, mx)
         n_sigma_max = 0.
         for (e_low, e_high), Phi_res, Phi_err in zip(bins, Phi_residual, Phi_errs):
             # Factor of 2 is needed because DAMPE measures e+ and e-
@@ -352,12 +353,14 @@ def line_width_constraint(dist, r_s, rho_s, gamma, halo, n_sigma=3., bg_model="d
             n_sigma_max = max(n_sigma_bin, n_sigma_max)
             if n_sigma_max >= n_sigma:  # stop if threshold was exceeded
                 return n_sigma_max
+
         return n_sigma_max
 
     return _line_width_constraint(dist, r_s, rho_s, gamma)
 
 
-def line_width_constraint_chi2(dist, r_s, rho_s, gamma, halo, bg_model="dampe", excluded_idxs=[]):
+def line_width_constraint_chi2(dist, r_s, rho_s, gamma, halo, mx=e_high_excess,
+                               bg_model="dampe", excluded_idxs=[]):
     """Returns significance of largest excess in a DAMPE bin aside from the one
     with the true excess.
     """
@@ -388,19 +391,20 @@ def line_width_constraint_chi2(dist, r_s, rho_s, gamma, halo, bg_model="dampe", 
 
     @np.vectorize
     def _line_width_constraint(dist, r_s, rho_s, gamma):
-        args = (dist, r_s, rho_s, gamma, halo)
-        n_sigma_max = 0.
-        for (e_low, e_high), Phi_res, Phi_err in zip(bins, Phi_residual, Phi_errs):
+        args = (dist, r_s, rho_s, gamma, halo, mx)
+
+        def bin_chi2(e_bin, Phi_res, Phi_err):
             # Factor of 2 is needed because DAMPE measures e+ and e-
             # The integrand is not sharply peaked outside the bin with the
             # excess, so we don't need to set `points`.
+            e_low, e_high = e_bin
             Phi_clump = 2 * quad(phi_e, e_low, e_high, args, epsabs=0, epsrel=1e-5)[0]
             # Determine significance of DM contribution
-            n_sigma_bin = (Phi_clump - Phi_res) / Phi_err
-            n_sigma_max = max(n_sigma_bin, n_sigma_max)
-            if n_sigma_max >= n_sigma:  # stop if threshold was exceeded
-                return n_sigma_max
-        return n_sigma_max
+            n_sigma = (Phi_clump - Phi_res) / Phi_err
+            return n_sigma**2
+
+        return sum([bin_chi2(e_bin, Phi_res, Phi_err)
+                    for (e_bin, Phi_res, Phi_err) in zip(bins, Phi_residual, Phi_errs)])
 
     return _line_width_constraint(dist, r_s, rho_s, gamma)
 
@@ -428,17 +432,17 @@ def fermi_point_src_contraint(dist, r_s, gamma, halo, e_star=230.):
 
 
 @np.vectorize
-def anisotropy_differential(e, dist, r_s, rho_s, gamma, halo,
+def anisotropy_differential(e, dist, r_s, rho_s, gamma, halo, mx=e_high_excess,
                             delta_d_rel=0.001, bg_model="dampe"):
     # Compute derivative with respect to distance numerically
     if bg_model == "dampe":
         phi_e_bg = phi_e_bg_dampe(e)
     elif bg_model == "alt":
         phi_e_bg = phi_e_bg_alt(e)
-    phi_e_d = 2 * phi_e(e, dist, r_s, rho_s, gamma, halo, epsrel=1e-3*delta_d_rel)
+    phi_e_d = 2 * phi_e(e, dist, r_s, rho_s, gamma, halo, mx, epsrel=1e-3*delta_d_rel)
 
     delta_d = delta_d_rel * dist
-    phi_e_d_dd = 2 * phi_e(e, dist + delta_d, r_s, rho_s, gamma, halo, epsrel=1e-3*delta_d_rel)
+    phi_e_d_dd = 2 * phi_e(e, dist + delta_d, r_s, rho_s, gamma, halo, mx, epsrel=1e-3*delta_d_rel)
 
     dphi_e_dd = np.abs((phi_e_d_dd - phi_e_d) / delta_d)
     phi_e_tot = phi_e_d + phi_e_bg
@@ -448,7 +452,7 @@ def anisotropy_differential(e, dist, r_s, rho_s, gamma, halo,
 
 @np.vectorize
 def anisotropy_integrated(e_low, e_high, dist, r_s, rho_s, gamma, halo,
-                          delta_d_rel=0.001, bg_model="dampe"):
+                          mx=e_high_excess, delta_d_rel=0.001, bg_model="dampe"):
     """Bin-averaged anisotropy."""
     points_e = np.clip(mx * (1 - np.logspace(-6, -1, 10)), e_low, e_high)
     args = (dist, r_s, rho_s, gamma, halo, delta_d_rel, bg_model)

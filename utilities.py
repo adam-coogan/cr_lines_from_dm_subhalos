@@ -134,6 +134,7 @@ e_low_excess, e_high_excess = 1318.3, 1513.6
 Phi_excess = (e_high_excess - e_low_excess) * phis_dampe[
     np.abs(es_dampe - 1400.0).argmin()
 ]
+i_excess = 29  # index of bin containing excess
 
 
 def max_dm_density(mx, sv):

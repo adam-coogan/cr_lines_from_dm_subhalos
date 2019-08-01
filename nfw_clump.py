@@ -8,9 +8,10 @@ from scipy import LowLevelCallable
 from scipy.integrate import quad
 from scipy.optimize import brentq
 
-from dm_params import mx, fx, sv
+from dm_params import fx, sv
 from utilities import e0, b0, D0, delta, kpc_to_cm, speed_of_light, D
 from utilities import rho_critical, GeV_to_m_sun
+from utilities import e_high_excess
 
 # Obtained by finding the mangled function name in:
 # >>> from scipy.special.cython_special import __pyx_capi__
@@ -48,7 +49,7 @@ def mass(rs, rhos, gamma):
 
 
 @np.vectorize
-def luminosity(rs, rhos, gamma):
+def luminosity(rs, rhos, gamma, mx=e_high_excess):
     factor = sv / (2 * fx * mx**2)
     rs_cm = kpc_to_cm * rs
     L_clump = (4*np.pi*rhos**2*rs_cm**3) / (30 - 47*gamma + 24*gamma**2 - 4*gamma**3)
