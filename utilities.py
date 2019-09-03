@@ -395,7 +395,7 @@ def sci_contours(dist, r_s, val, ax, levels=None):
         levels = log_levels(val)
 
     cs = ax.contour(dist, r_s, val, levels=levels, norm=LogNorm())
-    clabels = {level: sci_fmt(level) for level in cs.levels}
+    clabels = {level: r"$" + sci_fmt(level) + r"$" for level in cs.levels}
     ax.clabel(cs, inline=True, fmt=clabels)
 
 

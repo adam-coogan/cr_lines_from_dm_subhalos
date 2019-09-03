@@ -16,7 +16,7 @@ from utilities import speed_of_light, D, rho_max, lambert_w_series
 from utilities import e_low_excess, e_high_excess
 from utilities import Phi_excess, dn_de_g_ap
 from utilities import bins_dampe, phis_dampe, phi_errs_dampe
-from utilities import fermi_pt_src_sens_120_45 as fermi_pt_src_sens
+from utilities import fermi_pt_src_sens_120_45
 from utilities import gamma_inc_upper
 
 from nfw_clump import rho as rho_nfw
@@ -409,7 +409,8 @@ def line_width_constraint_chi2(dist, r_s, rho_s, gamma, halo, mx=e_high_excess,
     return _line_width_constraint(dist, r_s, rho_s, gamma)
 
 
-def fermi_point_src_contraint(dist, r_s, gamma, halo, e_star=230.):
+def fermi_point_src_contraint(dist, r_s, gamma, halo, e_star=230.,
+                              fermi_pt_src_sens=fermi_pt_src_sens_120_45):
     """Computes the maximum halo density normalization consistent with Fermi's
     non-observation of point sources coming from DM clumps.
 

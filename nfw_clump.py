@@ -31,21 +31,43 @@ def rho(dist, rs, rhos, gamma):
 def mass(rs, rhos, gamma):
     # Find virial mass numerically. The "magic number" of 10000 should
     # be fine for this project.
-    try:
-        def _r_vir_integrand(r):
-            return (rho(r, rs, rhos, gamma) - 200. * rho_critical)
+    def _r_vir_integrand(r):
+        return (rho(r, rs, rhos, gamma) - 200. * rho_critical)
 
-        r_vir = brentq(_r_vir_integrand, 0.01 * rs, 100. * rs, xtol=1e-200)
+    try:
+        r_vir = brentq(_r_vir_integrand, 0.01 * rs, 5000. * rs, xtol=1e-200)
     except RuntimeError:
         r_vir = np.nan
+    except ValueError as ve:
+        print(rs, rhos, gamma)
+        print(_r_vir_integrand(0.01 * rs))
+        print(_r_vir_integrand(100 * rs))
+        print(_r_vir_integrand(500 * rs))
+        print(_r_vir_integrand(1000 * rs))
+        raise ve
 
     # Integrate numerically: analytic result has an imaginary part
-    factor = 4.*np.pi * GeV_to_m_sun * kpc_to_cm**3
+    factor = 4. * np.pi * GeV_to_m_sun * kpc_to_cm**3
 
     def _mass_integrand(r):
         return r**2 * rho(r, rs, rhos, gamma)
 
     return factor * quad(_mass_integrand, 0, r_vir, epsabs=0, epsrel=1e-5)[0]
+
+
+@np.vectorize
+def viral_radius(rs, rhos, gamma):
+    # Find virial mass numerically. The "magic number" of 10000 should
+    # be fine for this project.
+    def _r_vir_integrand(r):
+        return (rho(r, rs, rhos, gamma) - 200. * rho_critical)
+
+    try:
+        r_vir = brentq(_r_vir_integrand, 0.01 * rs, 5000. * rs, xtol=1e-200)
+    except RuntimeError:
+        r_vir = np.nan
+
+    return r_vir
 
 
 @np.vectorize
