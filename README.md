@@ -1,4 +1,4 @@
-# Code for ``Connecting direct and indirect detection with a dark spike in the cosmic-ray electron spectrum''
+# Code for "Connecting direct and indirect detection with a dark spike in the cosmic-ray electron spectrum"
 
 Paper available on [arXiv](https://arxiv.org/abs/1903.07177). Cite as:
 
